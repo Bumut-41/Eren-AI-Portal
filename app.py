@@ -21,14 +21,14 @@ with st.sidebar:
     st.divider()
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
-# --- 2. API VE ARAÇ (TOOL) AYARLARI ---
+# --- 2. API BAĞLANTISI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
+    st.error("Lütfen Streamlit Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# --- 3. ANA EKRAN ---
+# --- 3. ANA EKRAN VE DOSYA YÜKLEME ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
@@ -42,6 +42,7 @@ with st.container(border=True):
     with col2:
         prompt = st.chat_input("Mesajınızı yazın veya dosya ekleyin...")
 
+# Mesaj geçmişini göster
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
@@ -57,15 +58,15 @@ if prompt:
         placeholder.markdown("Eren AI web sitesini analiz ediyor... 🌐")
         
         try:
-            # Web arama özelliğini modele 'tools' olarak ekliyoruz
+            # 404 hatalarını önlemek için en güvenli arama aracı kullanımı
             model = genai.GenerativeModel(
-                model_name='models/gemini-1.5-flash',
-                tools=[{'google_search_retrieval': {}}], # Web tarama yeteneği açıldı
+                model_name='gemini-1.5-flash',
+                tools=[{"google_search": {}}],
                 system_instruction=f"""
                 Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. 
-                KURAL 1: Okulla ilgili bir soru geldiğinde MUTLAKA https://eren.k12.tr sitesini tara.
-                KURAL 2: Asla isim veya tarih uydurma. Sitede yoksa 'bilmiyorum' de ve link ver.
-                Müdür: Mert Kadıoğlu, Müdür Yardımcısı: Damla İskender (Bilgileri siteden teyit et).
+                Okulla ilgili sorularda SADECE https://eren.k12.tr sitesindeki güncel verileri kullan.
+                Müdür: Mert Kadıoğlu, Müdür Yardımcısı: Damla İskender. 
+                Sitede olmayan hiçbir ismi uydurma. Modun: {modul}.
                 """
             )
 
@@ -77,8 +78,11 @@ if prompt:
                 elif yuklenen_dosya.type == "application/pdf":
                     icerik.append({"mime_type": "application/pdf", "data": yuklenen_dosya.read()})
 
-            # Cevap üretme (Arama yaparak)
             response = model.generate_content(icerik)
             
+            # 84. satırdaki parantez hatası burada düzeltildi
             placeholder.markdown(response.text)
-            st.session_state.messages.append({"role": "assistant",
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
+        except Exception as e:
+            st.error(f"Sistem Hatası: {str(e)}")
