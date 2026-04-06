@@ -3,7 +3,7 @@ import google.generativeai as genai
 import PIL.Image
 import os
 
-# --- 1. SAYFA VE SOL MENÜ (VAZGEÇİLMEZLERİN) ---
+# --- 1. GÖRSEL AYARLAR (SOL MENÜ VE LOGO) ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 with st.sidebar:
@@ -21,11 +21,11 @@ with st.sidebar:
     st.divider()
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
-# --- 2. API BAĞLANTISI (HATASIZ MODEL TANIMI) ---
+# --- 2. API BAĞLANTISI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
+    st.error("Lütfen Streamlit Secrets kısmına API anahtarınızı ekleyin!")
     st.stop()
 
 # --- 3. ANA EKRAN VE DOSYA YÜKLEME ---
@@ -34,6 +34,7 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Senin istediğin dosya yükleme ve giriş alanı
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
@@ -45,7 +46,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. KESİN VE DOĞRU BİLGİ ÜRETME ---
+# --- 4. ANALİZ VE CEVAP (DOĞRULANMIŞ VERİLERLE) ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -53,21 +54,22 @@ if prompt:
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Eren AI analiz ediyor... 🛡️")
+        placeholder.markdown("Eren AI gerçek verileri analiz ediyor... 🛡️")
         
         try:
-            # 404 hatasını önlemek için 'models/' ön eki olmadan en kararlı modeli çağırıyoruz
+            # 404 hatasını önlemek için 'models/' ön ekini kaldırdım
+            # Bilgileri uydurmaması için doğrudan sistem talimatına yazdım
             model = genai.GenerativeModel(
                 model_name='gemini-1.5-flash',
                 system_instruction=f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. 
-                ASLA YALAN SÖYLEME VE İSİM UYDURMA. GERÇEK LİSTE:
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanısın. 
+                RESMİ WEB SİTESİ VERİLERİ (ASLA DIŞINA ÇIKMA VE UYDURMA):
                 - Okul Müdürü: Mert Kadıoğlu
                 - Müdür Yardımcısı: Damla İskender
                 - Kurucu: Sadıka Ulusan
-                - Web Sitesi: https://eren.k12.tr
+                - Web: https://eren.k12.tr
                 
-                Okulla ilgili başka bir lider veya kişi sorulursa, uydurmak yerine 'Bilgim dahilinde değil, lütfen eren.k12.tr adresini kontrol edin' de.
+                Sana sorulan kişi bu listede yoksa, uydurmak yerine 'Bu bilgiye şu an ulaşamıyorum, lütfen okulun resmi sitesini (https://eren.k12.tr) kontrol edin' de.
                 Aktif modun: {modul}.
                 """
             )
@@ -84,4 +86,4 @@ if prompt:
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Sistemde bir güncelleme var, lütfen az sonra tekrar deneyin. (Hata: {str(e)})")
+            st.error(f"Sistemde teknik bir aksaklık oluştu: {str(e)}")
