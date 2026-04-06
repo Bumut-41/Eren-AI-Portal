@@ -3,39 +3,40 @@ import google.generativeai as genai
 import PIL.Image
 import os
 
-# --- 1. SAYFA AYARLARI ---
+# --- 1. SAYFA VE SOL MENÜ AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# --- 2. SOL MENÜ (SIDEBAR) - MODÜL SEÇİMİ ---
+# Sol Menü (Sidebar) - Senin Olmazsa Olmazın
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    # Logo dosyası dizinde varsa gösterilir
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
     
     st.subheader("Modül Seçin:")
-    modul_secimi = st.selectbox(
+    modul = st.selectbox(
         "Asistan Modu",
         ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"],
         label_visibility="collapsed"
     )
     
-    st.info(f"Aktif Mod: {modul_secimi}")
+    st.info(f"Aktif Mod: {modul}")
     st.divider()
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
-# --- 3. API ANAHTARI KONTROLÜ ---
-# ÖNEMLİ: Hata almamak için Streamlit Secrets'a GOOGLE_API_KEY ekle
+# --- 2. API ANAHTARI BAĞLANTISI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Lütfen Streamlit Cloud Secrets kısmına geçerli bir API anahtarı ekleyin.")
+    st.error("Hata: Streamlit Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# --- 4. ANA EKRAN VE DOSYA YÜKLEME ALANI ---
+# --- 3. ANA EKRAN VE DOSYA YÜKLEME ALANI ---
 st.title("🛡️ Eren AI Portalı")
 
-# Dosya yükleme ve giriş alanı
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Dosya yükleme ve giriş kutusu yan yana
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
@@ -43,15 +44,12 @@ with st.container(border=True):
     with col2:
         prompt = st.chat_input("Mesajınızı yazın veya dosya ekleyin...")
 
-# Mesaj geçmişi yönetimi
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
+# Mesaj geçmişini göster
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 5. CEVAP ÜRETME SÜRECİ ---
+# --- 4. CEVAP ÜRETME (404 HATASINI ÖNLEYEN OTOMATİK MODEL SEÇİMİ) ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -62,19 +60,17 @@ if prompt:
         placeholder.markdown("Eren AI analiz ediyor... 🛡️")
         
         try:
-            # 404 hatasını önlemek için model ismini tam yol olarak veriyoruz
+            # 404 hatasını çözmek için sistemde çalışan modeli buluyoruz
+            model_list = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            # Önce flash modelini ara, yoksa listedeki ilkini kullan
+            safe_model_name = next((m for m in model_list if "gemini-1.5-flash" in m), model_list[0])
+            
             model = genai.GenerativeModel(
-                model_name='models/gemini-1.5-flash',
-                system_instruction=f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin asistanısın. 
-                Aktif modun: {modul_secimi}. 
-                Okul müdürü: Mert Kadıoğlu. 
-                Web sitesi: www.eren.k12.tr. 
-                Bilgileri bu doğrultuda ver.
-                """
+                model_name=safe_model_name,
+                system_instruction=f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Modun: {modul}. Müdür: Mert Kadıoğlu. Web: www.eren.k12.tr"
             )
 
-            # İçerik birleştirme (Metin + Dosya)
+            # İçerik hazırlama
             icerik = [prompt]
             if yuklenen_dosya:
                 if yuklenen_dosya.type.startswith("image/"):
@@ -87,5 +83,4 @@ if prompt:
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            # Hata oluşursa kullanıcıya temiz bir mesaj göster
-            st.error(f"Bir sorun oluştu. Lütfen API anahtarınızı ve internet bağlantınızı kontrol edin. (Hata: {str(e)})")
+            st.error(f"Sistemde bir güncelleme yapılıyor. Lütfen API anahtarınızı kontrol edin. (Detay: {str(e)})")
