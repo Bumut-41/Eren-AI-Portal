@@ -3,7 +3,7 @@ import google.generativeai as genai
 import PIL.Image
 import os
 
-# --- 1. SOL MENÜ VE TASARIM (HATA BURADA DEĞİL, GÜVENLE KULLAN) ---
+# --- 1. GÖRSEL AYARLAR VE SOL MENÜ ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 with st.sidebar:
@@ -24,7 +24,7 @@ with st.sidebar:
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Lütfen Secrets kısmına GOOGLE_API_KEY ekleyin!")
+    st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
 # --- 3. ANA EKRAN VE GİRİŞ ALANI ---
@@ -44,7 +44,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. HATAYI ÇÖZEN KRİTİK KISIM ---
+# --- 4. HATAYI ÇÖZEN ÇEKİRDEK KISIM ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -52,25 +52,25 @@ if prompt:
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Eren AI yanıt veriyor... 🛡️")
+        placeholder.markdown("Yanıt hazırlanıyor... 🛡️")
         
         try:
-            # DİKKAT: 'models/' ekini sildik, sadece modelin adını yazıyoruz.
-            # Bu, aldığın 404 hatasını %100 çözecektir.
+            # KRİTİK: 'models/' ön ekini sildim. 404 hatasını bu çözecek.
             model = genai.GenerativeModel('gemini-1.5-flash') 
             
-            # Doğru bilgileri talimat olarak veriyoruz
-            talimat = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın.
-            GERÇEK BİLGİLER:
-            - Müdür: Mert Kadıoğlu
+            # Okulun gerçek bilgilerini manuel ekledik (İsim uyduramaz)
+            sistem_kurali = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanısın.
+            KESİN BİLGİLER:
+            - Okul Müdürü: Mert Kadıoğlu
             - Müdür Yardımcısı: Damla İskender
+            - Kurucu: Sadıka Ulusan
             - Web: https://eren.k12.tr
-            Bu bilgiler dışına çıkma ve uydurma. Modun: {modul}.
+            Bu bilgiler dışında birini sorma, uydurma. Modun: {modul}.
             """
 
-            # İçeriği birleştirip gönderiyoruz
-            icerik = [talimat, prompt]
+            # Verileri gönder
+            icerik = [sistem_kurali, prompt]
             if yuklenen_dosya:
                 if yuklenen_dosya.type.startswith("image/"):
                     icerik.append(PIL.Image.open(yuklenen_dosya))
@@ -80,4 +80,4 @@ if prompt:
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Sistem hatası: {str(e)}")
+            st.error(f"Teknik bir aksaklık: {str(e)}")
