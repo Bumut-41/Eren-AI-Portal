@@ -3,7 +3,7 @@ import google.generativeai as genai
 import PIL.Image
 import os
 
-# --- 1. SAYFA VE SOL MENÜ AYARLARI ---
+# --- 1. SAYFA VE SOL MENÜ (SENİN VAZGEÇİLMEZİN) ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 with st.sidebar:
@@ -28,13 +28,13 @@ else:
     st.error("Lütfen Streamlit Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# --- 3. ANA EKRAN VE DOSYA YÜKLEME ---
+# --- 3. ANA EKRAN VE DOSYA YÜKLEME ALANI ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Dosya yükleme ve giriş alanı
+# Dosya yükleme ve giriş kutusu yan yana
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
@@ -47,7 +47,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. CANLI WEB ANALİZİ VE CEVAP ÜRETME ---
+# --- 4. CEVAP ÜRETME (HATASIZ VE WEB ANALİZLİ) ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -55,18 +55,21 @@ if prompt:
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Eren AI web sitesini analiz ediyor... 🌐")
+        placeholder.markdown("Eren AI gerçek zamanlı analiz yapıyor... 🛡️")
         
         try:
-            # 404 hatalarını önlemek için en güvenli arama aracı kullanımı
+            # Hatalı "google_search" alanını temizleyip en basit yöntemle modele tanıtıyoruz
             model = genai.GenerativeModel(
                 model_name='gemini-1.5-flash',
-                tools=[{"google_search": {}}],
+                tools=[{"google_search_retrieval": {}}], # Bu format en güncel ve hatasız olandır
                 system_instruction=f"""
                 Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. 
-                Okulla ilgili sorularda SADECE https://eren.k12.tr sitesindeki güncel verileri kullan.
-                Müdür: Mert Kadıoğlu, Müdür Yardımcısı: Damla İskender. 
-                Sitede olmayan hiçbir ismi uydurma. Modun: {modul}.
+                RESMİ VERİLER: 
+                - Web: https://eren.k12.tr
+                - Müdür: Mert Kadıoğlu
+                - Müdür Yard.: Damla İskender
+                Okulla ilgili sorularda bu bilgileri kullan ve web sitesinden teyit et.
+                Aktif modun: {modul}.
                 """
             )
 
@@ -80,9 +83,9 @@ if prompt:
 
             response = model.generate_content(icerik)
             
-            # 84. satırdaki parantez hatası burada düzeltildi
             placeholder.markdown(response.text)
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Sistem Hatası: {str(e)}")
+            # Hata oluşursa uydurma cevap verme, hata ver ama çalışmaya devam et
+            st.error(f"Sistem bir kısıtlama ile karşılaştı. Lütfen tekrar deneyin. (Hata: {str(e)})")
