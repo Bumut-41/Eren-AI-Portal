@@ -6,12 +6,13 @@ import os
 # --- 1. SAYFA AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="centered")
 
-# --- 2. API ANAHTARI (SECRETS) ---
-# "403 Leaked" hatasını almamak için anahtar sadece Secrets'ta olmalı
+# --- 2. API ANAHTARI VE GÜVENLİK ---
+# Eğer Secrets kısmına GOOGLE_API_KEY eklemediysen uygulama çalışmaz.
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Lütfen Streamlit Secrets kısmına GOOGLE_API_KEY ekleyin.")
+    st.error("Lütfen Streamlit Secrets kısmına GOOGLE_API_KEY ekleyin!")
+    st.stop()
 
 # --- 3. YAN MENÜ ---
 with st.sidebar:
@@ -40,7 +41,7 @@ with st.container(border=True):
     with col2:
         prompt = st.chat_input("Mesajınızı yazın...")
 
-# --- 6. CEVAP ÜRETME (404 HATASI ÇÖZÜMÜ) ---
+# --- 6. ANALİZ VE CEVAP ÜRETME (404 HATASINI ÖNLEYEN YAPI) ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -48,29 +49,35 @@ if prompt:
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Eren AI analiz ediyor... 🛡️")
+        placeholder.markdown("Eren AI araştırıyor... 🛡️")
         
         try:
-            # 404 hatasını önlemek için model ismini doğrudan 'gemini-1.5-flash' olarak çağırıyoruz
+            # 404 hatasını aşmak için sistemde aktif olan ilk uygun modeli seçiyoruz
+            model_list = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            # Önce flash modelini dene, yoksa listedeki ilk modeli al
+            safe_model_name = next((m for m in model_list if "gemini-1.5-flash" in m), model_list[0])
+            
             model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
+                model_name=safe_model_name,
+                # Arama özelliği hata verirse sistemi durdurmaması için şimdilik sade tutuyoruz
                 system_instruction="""
                 Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanı Eren AI'sın.
-                Akademik ve kurumsal bir dil kullan. Okulun web sitesi 'www.eren.k12.tr'dir.
+                Okul web sitesi: www.eren.k12.tr. Bilimsel ve nazik bir dil kullan.
                 """
             )
 
+            # İçerik hazırlama
             icerik = [prompt]
             if yuklenen_dosya:
                 if yuklenen_dosya.type.startswith("image/"):
                     icerik.append(PIL.Image.open(yuklenen_dosya))
-                # PDF desteği için veriyi byte olarak ekliyoruz
                 elif yuklenen_dosya.type == "application/pdf":
                     icerik.append({"mime_type": "application/pdf", "data": yuklenen_dosya.read()})
 
+            # Yanıt oluşturma
             response = model.generate_content(icerik)
             placeholder.markdown(response.text)
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Hata oluştu: {str(e)}")
+            st.error(f"Bir sorun oluştu: {str(e)}")
