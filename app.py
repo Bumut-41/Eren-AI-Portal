@@ -33,6 +33,7 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Dosya yükleme ve mesaj giriş alanı yan yana
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
@@ -44,7 +45,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. HATAYI ÇÖZEN ÇEKİRDEK KISIM ---
+# --- 4. CEVAP ÜRETME (EN STABİL YAPI) ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -52,16 +53,16 @@ if prompt:
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Yanıt hazırlanıyor... 🛡️")
+        placeholder.markdown("Eren AI yanıt hazırlıyor... 🛡️")
         
         try:
-            # KRİTİK: 'models/' ön ekini sildim. 404 hatasını bu çözecek.
+            # 404 hatasını bitirmek için en yalın model ismini kullanıyoruz
             model = genai.GenerativeModel('gemini-1.5-flash') 
             
-            # Okulun gerçek bilgilerini manuel ekledik (İsim uyduramaz)
-            sistem_kurali = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanısın.
-            KESİN BİLGİLER:
+            # Gerçek bilgiler (Artık uydurma yapamaz)
+            sistem_mesaji = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanısın. 
+            GERÇEK BİLGİLER:
             - Okul Müdürü: Mert Kadıoğlu
             - Müdür Yardımcısı: Damla İskender
             - Kurucu: Sadıka Ulusan
@@ -69,15 +70,11 @@ if prompt:
             Bu bilgiler dışında birini sorma, uydurma. Modun: {modul}.
             """
 
-            # Verileri gönder
-            icerik = [sistem_kurali, prompt]
-            if yuklenen_dosya:
-                if yuklenen_dosya.type.startswith("image/"):
-                    icerik.append(PIL.Image.open(yuklenen_dosya))
-
-            response = model.generate_content(icerik)
+            # İçeriği gönder
+            response = model.generate_content([sistem_mesaji, prompt])
+            
             placeholder.markdown(response.text)
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Teknik bir aksaklık: {str(e)}")
+            st.error(f"Teknik bir hata oluştu: {str(e)}")
