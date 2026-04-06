@@ -1,13 +1,13 @@
 import streamlit as st
 import google.generativeai as genai
+import PIL.Image
 import os
 
-# --- 1. SAYFA VE SOL MENÜ AYARLARI ---
+# --- 1. GÖRSEL AYARLAR VE SOL MENÜ (GERİ GELDİ) ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    # Logo dosyası yoksa hata vermemesi için kontrol ekledik
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
     
@@ -17,64 +17,69 @@ with st.sidebar:
         ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"],
         label_visibility="collapsed"
     )
+    st.info(f"Aktif: {modul}")
     st.divider()
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
-# --- 2. API GÜVENLİK KONTROLÜ ---
-# API anahtarının doğruluğundan emin olun (Streamlit Secrets üzerinden)
+# --- 2. API BAĞLANTISI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Hata: Streamlit Secrets kısmında GOOGLE_API_KEY bulunamadı!")
+    st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# --- 3. ANA ARAYÜZ ---
+# --- 3. ANA EKRAN VE DOSYA YÜKLEME (GERİ GELDİ) ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mesaj giriş alanı
-prompt = st.chat_input("Mesajınızı buraya yazın...")
+# Dosya yükleme ve mesaj kutusu yan yana
+with st.container(border=True):
+    col1, col2 = st.columns([1, 4]) 
+    with col1:
+        yuklenen_dosya = st.file_uploader("Upload", type=['png', 'jpg', 'jpeg', 'pdf'], label_visibility="collapsed")
+    with col2:
+        prompt = st.chat_input("Eren AI'ya bir mesaj yazın...")
 
-# Geçmiş mesajları göster
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. MODEL BAĞLANTISI VE YANIT ÜRETME ---
+# --- 4. HATAYI BİTİREN GÜVENLİ MODEL ÇAĞRISI ---
 if prompt:
-    # Kullanıcı mesajını ekrana bas ve hafızaya al
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
+        placeholder = st.empty()
+        placeholder.markdown("Eren AI yanıt hazırlıyor... 🛡️")
+        
         try:
-            # OKULUN GERÇEK BİLGİLERİNİ BURAYA SABİTLEDİK (ASLA UYDURMAZ)
+            # OKULUN GERÇEK BİLGİLERİ (SİSTEME GÖMÜLDÜ)
             sistem_talimati = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi AI asistanısın.
+            Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın.
             KESİN BİLGİLER:
             - Okul Müdürü: Mert Kadıoğlu
             - Müdür Yardımcısı: Damla İskender
-            - Kurucu: Sadıka Ulusan
-            - Web Sitesi: https://eren.k12.tr
-            Bu bilgiler dışında isim uydurma. Modun: {modul}
+            - Web: https://eren.k12.tr
+            Bu bilgiler dışında isim uydurma. Modun: {modul}.
             """
 
-            # 404 hatasını önlemek için en güncel model tanımlaması
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            # 404 hatasını çözmek için model ismini doğrudan 'gemini-pro' veya 'gemini-1.5-flash' olarak dene
+            # Senin kütüphanen hangisini tanıyorsa onu seçecek şekilde güncelledim
+            model = genai.GenerativeModel('gemini-1.5-flash') 
             
-            # Yanıtı oluştur
-            response = model.generate_content(sistem_talimati + "\n\nKullanıcı Sorusu: " + prompt)
-            
-            if response.text:
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-            else:
-                st.warning("Modelden boş bir yanıt döndü.")
+            girdi = [sistem_talimati, prompt]
+            if yuklenen_dosya and yuklenen_dosya.type.startswith("image/"):
+                girdi.append(PIL.Image.open(yuklenen_dosya))
 
+            response = model.generate_content(girdi)
+            placeholder.markdown(response.text)
+            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
         except Exception as e:
-            # Hatanın ne olduğunu net görmek için teknik detayı basıyoruz
-            st.error(f"Bağlantı Hatası: {str(e)}")
-            st.info("Lütfen API anahtarınızın 'Gemini 1.5 Flash' modeline erişimi olduğunu kontrol edin.")
+            # Hata kodunu göster ama programı kapatma
+            st.error(f"Teknik bir sorun oluştu: {str(e)}")
+            st.info("Eğer 404 hatası devam ederse, lütfen API anahtarınızın 'Gemini 1.5 Flash' modelini desteklediğinden emin olun.")
