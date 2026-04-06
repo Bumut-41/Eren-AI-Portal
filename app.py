@@ -7,7 +7,6 @@ import os
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="centered")
 
 # --- 2. GÜVENLİ API ANAHTARI BAĞLANTISI ---
-# Kod sızıntısını önlemek için Secrets üzerinden çalışır
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
@@ -15,7 +14,6 @@ else:
 
 # --- 3. YAN MENÜ VE LOGO ---
 with st.sidebar:
-    # Logo.png dosyasının GitHub'da aynı klasörde olduğundan emin ol
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=200)
     st.title("Eren AI Menü")
@@ -37,7 +35,6 @@ st.title("🛡️ Eren AI Portalı")
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
-        # Dosya yükleyici alanı
         yuklenen_dosya = st.file_uploader("Dosya", type=['png', 'jpg', 'jpeg', 'pdf', 'txt'], label_visibility="collapsed")
     with col2:
         prompt = st.chat_input("Mesajınızı yazın...")
@@ -53,44 +50,39 @@ if prompt:
         placeholder.markdown("Eren AI araştırıyor ve analiz ediyor... 🛡️")
         
         try:
-            # Model Seçimi
-            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            target_model = next((m for m in available_models if "gemini-1.5-flash" in m), available_models[0])
-            
-            # --- MODEL TANIMLAMA (KİMLİK + ARAMA ÖZELLİĞİ) ---
+            # --- MODEL VE DOĞRU ARAÇ TANIMLAMA ---
+            # Hata 400 Çözümü: 'google_search_retrieval' yerine sadece 'google_search' kullanıyoruz
             model = genai.GenerativeModel(
-                model_name=target_model,
-                # Google Arama özelliğini aktif ediyoruz
-                tools=[{"google_search_retrieval": {}}],
+                model_name="gemini-1.5-flash",
+                tools=[{"google_search": {}}], 
                 system_instruction="""
                 Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi yapay zeka asistanısın (Eren AI). 
                 Görevin okulun vizyonuna uygun bilimsel ve akademik destek vermektir. 
                 Sana 'kimsin' denildiğinde Özel Eren Fen ve Teknoloji Lisesi asistanı olduğunu söylemelisin.
                 
-                ÖNEMLİ: Okulunla ilgili (müdür, duyurular, etkinlikler vb.) her soruyu 
-                MUTLAKA 'www.eren.k12.tr' sitesinden araştırarak en güncel bilgiyi ver.
-                Eğer sitede bilgi bulamazsan tahminde bulunma, kullanıcıyı okul yönetimine yönlendir.
+                ÖNEMLİ: Okulunla ilgili her soruyu MUTLAKA 'www.eren.k12.tr' sitesinden araştırarak yanıtla.
                 """
             )
 
-            # İçerik toplama (Metin + Dosya)
+            # İçerik toplama
             icerik = [prompt]
             if yuklenen_dosya:
                 if yuklenen_dosya.type == "application/pdf":
                     icerik.append({"mime_type": "application/pdf", "data": yuklenen_dosya.read()})
                 elif yuklenen_dosya.type.startswith("image/"):
                     icerik.append(PIL.Image.open(yuklenen_dosya))
-                else:
-                    icerik.append(yuklenen_dosya.getvalue().decode("utf-8"))
 
             # Yanıt üretme
             response = model.generate_content(icerik)
-            placeholder.markdown(response.text)
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
+            # Yanıtın metin kısmını al
+            if response.text:
+                full_response = response.text
+            else:
+                full_response = "Üzgünüm, bu konuda bilgi bulamadım."
+                
+            placeholder.markdown(full_response)
+            st.session_state.messages.append({"role": "assistant", "content": full_response})
             
         except Exception as e:
-            # Sızıntı hatası durumunda kullanıcıyı uyarır
-            if "403" in str(e):
-                st.error("Hata: API anahtarı sızdırıldığı için iptal edilmiş. Lütfen Secrets kısmına YENİ anahtarı ekleyin.")
-            else:
-                st.error(f"Hata: {str(e)}")
+            st.error(f"Hata oluştu: {str(e)}")
