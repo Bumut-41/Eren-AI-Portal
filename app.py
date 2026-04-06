@@ -3,12 +3,11 @@ import google.generativeai as genai
 import PIL.Image
 import os
 
-# --- 1. GÖRSEL AYARLAR VE SOL MENÜ ---
+# --- 1. GÖRSEL AYARLAR ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    # Logo dosyanın adının Logo.png olduğundan emin ol
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
     
@@ -29,13 +28,13 @@ else:
     st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# --- 3. ANA EKRAN VE DOSYA YÜKLEME ---
+# --- 3. ANA EKRAN ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Senin istediğin yan yana tasarım
+# Giriş ve Yükleme alanı
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
@@ -47,7 +46,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. CEVAP ÜRETME (HATASIZ MODEL KULLANIMI) ---
+# --- 4. CEVAP ÜRETME (EN KARARLI YÖNTEM) ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -55,28 +54,24 @@ if prompt:
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        placeholder.markdown("Eren AI yanıt hazırlıyor... 🛡️")
+        placeholder.markdown("Analiz ediliyor... 🛡️")
         
         try:
-            # 404 hatasını çözmek için 'models/' ön ekini sildim
-            # Bilgileri uydurmaması için doğrudan buraya yazdım
-            model = genai.GenerativeModel(
-                model_name='gemini-1.5-flash',
-                system_instruction=f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanısın. 
-                Aşağıdaki bilgiler GERÇEKTİR ve ASLA DIŞINA ÇIKMA:
-                - OKUL MÜDÜRÜ: Mert Kadıoğlu
-                - MÜDÜR YARDIMCISI: Damla İskender
-                - OKUL WEB SİTESİ: https://eren.k12.tr
-                - KURUCU: Sadıka Ulusan
-                
-                Eğer bu bilgiler dışında bir personel sorulursa uydurma yapma. 
-                'Güncel bilgi için https://eren.k12.tr adresini ziyaret edin' de.
-                Aktif modun: {modul}.
-                """
-            )
+            # 404 hatasını önlemek için model ismini tırnak içinde ve en sade haliyle yazdım
+            # Okul bilgilerini manuel ekledim ki web hatası almayalım
+            model = genai.GenerativeModel('gemini-1.5-flash') 
+            
+            talimat = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın.
+            OKUL BİLGİLERİ (DOĞRU LİSTE):
+            - Müdür: Mert Kadıoğlu
+            - Müdür Yardımcısı: Damla İskender
+            - Kurucu: Sadıka Ulusan
+            - Web: https://eren.k12.tr
+            Bu bilgiler dışında birini uydurma. Modun: {modul}.
+            """
 
-            icerik = [prompt]
+            icerik = [talimat, prompt]
             if yuklenen_dosya:
                 if yuklenen_dosya.type.startswith("image/"):
                     icerik.append(PIL.Image.open(yuklenen_dosya))
@@ -88,4 +83,4 @@ if prompt:
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Teknik bir sorun oluştu. Detay: {str(e)}")
+            st.error(f"Teknik bir hata: {str(e)}")
