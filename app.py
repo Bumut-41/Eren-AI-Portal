@@ -48,15 +48,28 @@ if prompt:
         placeholder = st.empty()
         placeholder.markdown("Eren AI analiz ediyor...")
         
-        try:
-            # Model Seçimi
-            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            target_model = next((m for m in available_models if "gemini-1.5-flash" in m), available_models[0])
-            
-            model = genai.GenerativeModel(
-                model_name=target_model,
-                system_instruction="Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanı Eren AI'sın."
-            )
+    # --- MODEL, KİMLİK VE ARAMA MOTORU TANIMLAMA ---
+try:
+    # Model seçimi (Flash modeli arama özelliği için en hızlısıdır)
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    target_model = next((m for m in available_models if "gemini-1.5-flash" in m), available_models[0])
+
+    model = genai.GenerativeModel(
+        model_name=target_model,
+        # YENİ EKLEDİĞİMİZ ARAMA ÖZELLİĞİ:
+        tools=[{"google_search_retrieval": {}}], 
+        # SENİN ESKİ KİMLİK BİLGİLERİN + YENİ TALİMAT:
+        system_instruction="""
+        Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi yapay zeka asistanısın (Eren AI). 
+        Görevin okulun vizyonuna uygun bilimsel ve akademik destek vermektir. 
+        Sana 'kimsin' denildiğinde Özel Eren Fen ve Teknoloji Lisesi asistanı olduğunu belirtmelisin.
+        
+        ÖNEMLİ: Okulunla ilgili (müdür, etkinlikler, duyurular vb.) sorular sorulduğunda 
+        MUTLAKA 'www.eren.k12.tr' adresini kontrol et ve oradaki en güncel bilgiyi ver.
+        """
+    )
+except Exception as e:
+    st.error(f"Model başlatılırken hata oluştu: {str(e)}")
 
             # Dosya Kontrolü
             icerik = [prompt]
