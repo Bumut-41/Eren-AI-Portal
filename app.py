@@ -7,17 +7,14 @@ from bs4 import BeautifulSoup
 import PyPDF2
 from docx import Document
 
-# --- 1. AYARLAR ---
-st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
-
-@st.cache_data(ttl=3600)
+# --- 1. YARDIMCI FONKSİYONLAR ---
 def web_sitesi_oku(url):
     try:
         r = requests.get(url, timeout=5)
         soup = BeautifulSoup(r.text, 'html.parser')
         for s in soup(["script", "style", "nav", "footer"]): s.extract()
         return soup.get_text()[:1500]
-    except Exception:
+    except:
         return ""
 
 def belge_oku(dosya):
@@ -31,17 +28,19 @@ def belge_oku(dosya):
             doc = Document(dosya)
             metin = "\n".join([p.text for p in doc.paragraphs[:50]])
         return metin[:3000]
-    except Exception:
+    except:
         return ""
 
-# --- 2. API YAPILANDIRMASI ---
+# --- 2. ANA UYGULAMA AYARLARI ---
+st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
+
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Secrets içinde GOOGLE_API_KEY bulunamadı!")
+    st.error("Secrets içinde API anahtarı bulunamadı!")
     st.stop()
 
-# --- 3. ARAYÜZ ---
+# --- 3. ARAYÜZ TASARIMI ---
 with st.sidebar:
     st.title("🛡️ Eren AI")
     if os.path.exists("Logo.png"):
@@ -53,43 +52,50 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Alanı
+# Dosya ve Soru Girişi
 c1, c2 = st.columns([1, 4])
 with c1:
     yukle = st.file_uploader("Dosya", type=['png','jpg','pdf','docx'], label_visibility="collapsed")
 with c2:
-    soru = st.chat_input("Mesajınızı yazın...")
+    soru = st.chat_input("Mesajınızı buraya yazın...")
 
+# Sohbet Geçmişini Görüntüle
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 4. YANIT MOTORU ---
+# --- 4. İŞLEME MANTIĞI (HATASIZ YAPI) ---
 if soru:
+    # 1. Kullanıcı mesajını kaydet
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
+    # 2. Yanıt üretme aşaması
     with st.chat_message("assistant"):
-        placeholder = st.empty()
-        placeholder.markdown("⚡ *Düşünülüyor...*")
+        alan = st.empty()
+        alan.markdown("⚡ *Düşünülüyor...*")
         
-        # Veri toplama
+        # Bilgi toplama
         site_v = web_sitesi_oku("https://eren.k12.tr/") if "eren" in soru.lower() else ""
         belge_v = belge_oku(yukle) if (yukle and not yukle.type.startswith("image/")) else ""
 
         try:
+            # Yapay Zeka Çağrısı
             model = genai.GenerativeModel("gemini-1.5-flash")
-            komut = f"Sen Eren AI'sın. Mod: {mod}. Veriler: {site_v} {belge_v}"
+            sistem_notu = f"Sen Eren AI'sın. Mod: {mod}. Veriler: {site_v} {belge_v}"
             
-            icerik = [komut, soru]
+            payload = [sistem_notu, soru]
             if yukle and yukle.type.startswith("image/"):
-                icerik.append(PIL.Image.open(yukle))
+                payload.append(PIL.Image.open(yukle))
 
-            yanit = model.generate_content(icerik)
+            yanit = model.generate_content(payload)
             
-            if yanit:
-                placeholder.markdown(yanit.text)
+            if yanit and yanit.text:
+                alan.markdown(yanit.text)
                 st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            else:
+                alan.error("Model yanıt üretemedi.")
+        
         except Exception as e:
-            placeholder.error(f"Hata oluştu: {str(e)}")
+            alan.error(f"Bir hata oluştu: {str(e)}")
