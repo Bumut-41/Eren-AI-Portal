@@ -8,10 +8,10 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 
-# --- 1. HIZ VE SAYFA AYARLARI ---
+# --- 1. AYARLAR VE ÖNBELLEK (HIZ İÇİN) ---
 st.set_page_config(page_title="Eren AI", page_icon="🛡️", layout="wide")
 
-@st.cache_data(ttl=3600) # Okul sitesini 1 saat hafızada tut (Hız kazandırır)
+@st.cache_data(ttl=3600)
 def hizli_site_oku(url):
     try:
         r = requests.get(url, timeout=3)
@@ -23,66 +23,92 @@ def hizli_site_oku(url):
 def hizli_dosya_oku(dosya):
     try:
         if dosya.name.lower().endswith('.pdf'):
-            return PyPDF2.PdfReader(dosya).pages[0].extract_text()[:2000] # Sadece 1. sayfa (Hız için)
+            # Sadece ilk 2 sayfayı oku (Hız kazandırır)
+            okuyucu = PyPDF2.PdfReader(dosya)
+            metin = ""
+            for i in range(min(2, len(okuyucu.pages))):
+                metin += okuyucu.pages[i].extract_text()
+            return metin[:2000]
         elif dosya.name.lower().endswith('.docx'):
-            return "\n".join([p.text for p in Document(dosya).paragraphs[:20]])
+            return "\n".join([p.text for p in Document(dosya).paragraphs[:30]])
         elif dosya.name.lower().endswith(('.xlsx', '.xls')):
             return pd.read_excel(dosya).head(10).to_string()
         return ""
     except: return "Dosya okuma atlandı."
 
-# --- 2. 404 HATASINI BİTİREN MODEL BULUCU ---
+# --- 2. API VE MODEL DOĞRULAMA (404 ÇÖZÜCÜ) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Secrets kısmına API KEY ekleyin!")
+    st.error("API Key eksik!")
     st.stop()
 
 @st.cache_resource
-def get_working_model():
-    # Mevcut hesabındaki çalışan model ismini otomatik seçer
+def get_model_safe():
+    # 404 hatasını önlemek için çalışan modeli bulur
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
                 if "gemini-1.5-flash" in m.name: return m.name
-        return "models/gemini-1.5-flash"
+        return "gemini-1.5-flash"
     except: return "gemini-1.5-flash"
 
-MODEL_NAME = get_working_model()
+MODEL_ID = get_model_safe()
 
 # --- 3. ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI")
     if os.path.exists("Logo.png"): st.image("Logo.png", width=100)
-    mod = st.selectbox("Mod", ["Asistan", "Akademik", "Veli"])
+    mod = st.selectbox("Mod Seçin:", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
+    st.divider()
+    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Alanları
-c1, c2 = st.columns([1, 5])
+# Giriş Alanı
+c1, c2 = st.columns([1, 4])
 with c1:
-    dosya = st.file_uploader("Ek", type=['png','jpg','pdf','docx','xlsx'], label_visibility="collapsed")
+    yukle = st.file_uploader("Dosya", type=['png','jpg','pdf','docx','xlsx'], label_visibility="collapsed")
 with c2:
-    soru = st.chat_input("Sorunuzu buraya yazın...")
+    soru = st.chat_input("Eren AI'ya hızlıca sorun...")
 
 for m in st.session_state.messages:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# --- 4. İŞLEME DÖNGÜSÜ ---
+# --- 4. AKILLI İŞLEME DÖNGÜSÜ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        placeholder = st.empty()
-        placeholder.markdown("⚡ *Yanıt hazırlanıyor...*")
+        durum = st.empty()
+        durum.markdown("⚡ *İşleniyor...*")
         
-        # Sadece okul ile ilgiliyse siteyi oku
-        site = hizli_site_oku("https://eren.k12.tr/") if any(k in soru.lower() for k in ["eren", "okul", "müdür"]) else ""
-        ek_icerik = hizli_dosya_oku(dosya) if (dosya and not dosya.type.startswith("image/")) else ""
+        # Gereksiz taramaları önle
+        site_veri = ""
+        if any(k in soru.lower() for k in ["eren", "okul", "müdür", "lise"]):
+            site_veri = hizli_site_oku("https://eren.k12.tr/")
+        
+        belge_veri = hizli_dosya_oku(yukle) if (yukle and not yukle.type.startswith("image/")) else ""
 
         try:
-            model = genai.GenerativeModel(MODEL_NAME)
+            model = genai.GenerativeModel(MODEL_ID)
+            
+            # Sistem talimatını optimize et
+            talimat = f"Sen Eren AI'sın. Mod: {mod}. Veri: {site_veri} {belge_veri}"
+            
+            payload = [talimat, soru]
+            if yukle and yukle.type.startswith("image/"):
+                payload.append(PIL.Image.open(yukle))
+
+            yanit = model.generate_content(payload)
+            durum.markdown(yanit.text)
+            st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            
+        except Exception as e:
+            st.error(f"Teknik bir sorun oluştu. Lütfen tekrar deneyin.")
+            # Geliştirici için hata detayı (Opsiyonel)
+            # st.write(f"Detay: {e}")
