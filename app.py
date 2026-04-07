@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 import PyPDF2
 from docx import Document
 
-# --- 1. SAYFA VE HIZ AYARLARI ---
+# --- 1. AYARLAR ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 @st.cache_data(ttl=3600)
@@ -20,100 +20,79 @@ def web_sitesi_oku(url):
     except Exception:
         return ""
 
-def belge_cozucu(dosya):
+def belge_oku(dosya):
     try:
         metin = ""
         if dosya.name.lower().endswith('.pdf'):
             pdf = PyPDF2.PdfReader(dosya)
-            for sayfa in pdf.pages[:3]: # Hız için ilk 3 sayfa
+            for sayfa in pdf.pages[:3]:
                 metin += sayfa.extract_text()
         elif dosya.name.lower().endswith('.docx'):
             doc = Document(dosya)
             metin = "\n".join([p.text for p in doc.paragraphs[:50]])
         return metin[:3000]
     except Exception:
-        return "Belge okunamadı."
+        return ""
 
 # --- 2. API YAPILANDIRMASI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("HATA: Streamlit Secrets içinde GOOGLE_API_KEY bulunamadı!")
+    st.error("Secrets içinde GOOGLE_API_KEY bulunamadı!")
     st.stop()
 
-# En kararlı model ismi
-MODEL_ID = "gemini-1.5-flash"
-
-# --- 3. YAN ÇUBUK (SIDEBAR) ---
+# --- 3. ARAYÜZ VE SOHBET ---
 with st.sidebar:
-    st.title("🛡️ Eren AI Menü")
+    st.title("🛡️ Eren AI")
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
-    
-    secilen_mod = st.selectbox(
-        "Asistan Modu", 
-        ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"]
-    )
-    st.divider()
-    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
+    mod = st.selectbox("Mod", ["Asistan", "Akademik", "Veli"])
 
-# --- 4. ANA ARAYÜZ VE SOHBET GEÇMİŞİ ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Alanları
-with st.container(border=True):
-    col1, col2 = st.columns([1, 4])
-    with col1:
-        yukleme = st.file_uploader("Dosya", type=['png','jpg','pdf','docx'], label_visibility="collapsed")
-    with col2:
-        kullanici_sorusu = st.chat_input("Eren AI'ya bir soru sorun...")
+# Giriş Bölümü
+c1, c2 = st.columns([1, 4])
+with c1:
+    yukle = st.file_uploader("Dosya", type=['png','jpg','pdf','docx'], label_visibility="collapsed")
+with c2:
+    soru = st.chat_input("Sorunuzu buraya yazın...")
 
-# Sohbeti Ekrana Bas
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. YANIT ÜRETİM MANTIĞI ---
-if kullanici_sorusu:
-    # Kullanıcı mesajını ekle
-    st.session_state.messages.append({"role": "user", "content": kullanici_sorusu})
+# --- 4. YANIT MOTORU (HATASIZ BLOK YAPISI) ---
+if soru:
+    st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
-        st.markdown(kullanici_sorusu)
+        st.markdown(soru)
 
     with st.chat_message("assistant"):
-        cevap_alani = st.empty()
-        cevap_alani.markdown("⚡ *Bağlantı kuruluyor...*")
+        alan = st.empty()
+        alan.markdown("⚡ *İşleniyor...*")
         
-        # Ek veri toplama
-        site_bilgisi = ""
-        if "eren" in kullanici_sorusu.lower() or "okul" in kullanici_sorusu.lower():
-            site_bilgisi = web_sitesi_oku("https://eren.k12.tr/")
-        
-        belge_bilgisi = ""
-        if yukleme and not yukleme.type.startswith("image/"):
-            belge_bilgisi = belge_cozucu(yukleme)
+        # Veri toplama
+        site_v = web_sitesi_oku("https://eren.k12.tr/") if "eren" in soru.lower() else ""
+        belge_v = belge_oku(yukle) if (yukle and not yukle.type.startswith("image/")) else ""
 
-        # AI Yanıtı
         try:
-            model = genai.GenerativeModel(MODEL_ID)
+            # Model Çağrısı
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            baglam = f"Sen Eren AI'sın. Mod: {mod}. Veriler: {site_v} {belge_v}"
             
-            sistem_komutu = f"Sen Eren AI'sın. Mod: {secilen_mod}. Web Verisi: {site_bilgisi}. Belge Verisi: {belge_bilgisi}"
-            
-            icerik_paketi = [sistem_komutu, kullanici_sorusu]
-            
-            if yukleme and yukleme.type.startswith("image/"):
-                icerik_paketi.append(PIL.Image.open(yukleme))
+            payload = [baglam, soru]
+            if yukle and yukle.type.startswith("image/"):
+                payload.append(PIL.Image.open(yukle))
 
-            yanit = model.generate_content(icerik_paketi)
+            yanit = model.generate_content(payload)
             
-            if yanit.text:
-                cevap_alani.markdown(yanit.text)
+            if yanit:
+                alan.markdown(yanit.text)
                 st.session_state.messages.append({"role": "assistant", "content": yanit.text})
             else:
-                cevap_alani.error("AI boş yanıt döndürdü, lütfen soruyu tekrar iletin.")
-                
+                alan.error("Modelden yanıt alınamadı.")
         except Exception as e:
-            cevap_alani.error(f"Sistem Hatası: API erişimi sağlanamadı. Detay: {str(e)}")
+            alan.error(f"Hata: {str(e)}")
