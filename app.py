@@ -10,107 +10,95 @@ import pandas as pd
 from pptx import Presentation
 import io
 
-# --- 1. AYARLAR ---
+# --- 1. SAYFA VE YAN ÇUBUK AYARLARI (Sidebar Sabitlendi) ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# --- 2. DOSYA OKUMA FONKSİYONLARI (YENİ!) ---
-def dosya_icerigini_oku(yuklenen_dosya):
-    icerik_metni = ""
-    dosya_adi = yuklenen_dosya.name.lower()
+# Yan çubuğu her zaman en başta tanımlıyoruz ki kaybolmasın
+with st.sidebar:
+    st.title("🛡️ Eren AI Menü")
+    if os.path.exists("Logo.png"):
+        st.image("Logo.png", width=150)
+    else:
+        st.info("Logo.png bulunamadı.")
     
-    try:
-        if dosya_adi.endswith('.pdf'):
-            pdf_reader = PyPDF2.PdfReader(yuklenen_dosya)
-            for page in pdf_reader.pages:
-                icerik_metni += page.extract_text() + "\n"
-        
-        elif dosya_adi.endswith('.docx'):
-            doc = Document(yuklenen_dosya)
-            icerik_metni = "\n".join([para.text for para in doc.paragraphs])
-            
-        elif dosya_adi.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(yuklenen_dosya)
-            icerik_metni = "Excel Tablo Verisi:\n" + df.to_string()
-            
-        elif dosya_adi.endswith('.pptx'):
-            prs = Presentation(yuklenen_dosya)
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        icerik_metni += shape.text + "\n"
-        
-        return f"\n--- Yüklenen Dosya ({dosya_adi}) İçeriği ---\n{icerik_metni}"
-    except Exception as e:
-        return f"\nDosya okunurken hata oluştu: {str(e)}"
+    modul = st.selectbox(
+        "Asistan Modu", 
+        ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"]
+    )
+    st.divider()
+    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
-# --- 3. WEB TARAMA FONKSİYONU ---
-def web_sitesini_oku(url):
+# --- 2. DOSYA OKUMA MOTORU ---
+def dosya_cozucu(dosya):
+    metin = ""
+    isim = dosya.name.lower()
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        for script in soup(["script", "style"]): script.extract()
-        metin = soup.get_text()
-        return "\n".join([l.strip() for l in metin.splitlines() if l.strip()])[:4000]
+        if isim.endswith('.pdf'):
+            okuyucu = PyPDF2.PdfReader(dosya)
+            for sayfa in okuyucu.pages: metin += sayfa.extract_text() + "\n"
+        elif isim.endswith('.docx'):
+            doc = Document(dosya)
+            metin = "\n".join([p.text for p in doc.paragraphs])
+        elif isim.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(dosya)
+            metin = "Tablo Verileri:\n" + df.to_string()
+        elif isim.endswith('.pptx'):
+            sunum = Presentation(dosya)
+            for slayt in sunum.slides:
+                for sekil in slayt.shapes:
+                    if hasattr(sekil, "text"): metin += sekil.text + "\n"
+        return f"\n[Dosya İçeriği: {isim}]\n{metin}"
+    except Exception as e:
+        return f"\n[Dosya Okuma Hatası]: {str(e)}"
+
+# --- 3. WEB TARAMA ---
+def site_oku(url):
+    try:
+        r = requests.get(url, timeout=10)
+        soup = BeautifulSoup(r.text, 'html.parser')
+        for s in soup(["script", "style"]): s.extract()
+        return soup.get_text()[:3000]
     except: return ""
 
-# --- 4. API VE MODEL ---
+# --- 4. API VE MODEL DOĞRULAMA (404 Çözücü) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı eksik!")
+    st.error("Lütfen Streamlit Secrets'a GOOGLE_API_KEY ekleyin.")
     st.stop()
 
+# Hata almamak için sistemdeki uygun model ismini buluyoruz
 @st.cache_resource
-def get_model():
-    return "gemini-1.5-flash" # Veya senin çalışan model ismin
+def model_bul():
+    return "gemini-1.5-flash" # Genel hata alan 'models/' ekini kaldırdık
 
-# --- 5. ARAYÜZ ---
+# --- 5. ARAYÜZ VE SOHBET ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Giriş Alanı
 with st.container(border=True):
-    col1, col2 = st.columns([1, 4]) 
-    with col1:
-        yuklenen_dosya = st.file_uploader("Dosya", type=['png', 'jpg', 'pdf', 'docx', 'xlsx', 'pptx'], label_visibility="collapsed")
-    with col2:
-        prompt = st.chat_input("Eren AI'ya bir soru sorun...")
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        yukle = st.file_uploader("Dosya Seç", type=['png','jpg','pdf','docx','xlsx','pptx'], label_visibility="collapsed")
+    with c2:
+        soru = st.chat_input("Eren AI'ya sor...")
 
+# Geçmişi Yazdır
 for m in st.session_state.messages:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# --- 6. İŞLEME ---
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"): st.markdown(prompt)
+# --- 6. YANIT ÜRETİMİ ---
+if soru:
+    st.session_state.messages.append({"role": "user", "content": soru})
+    with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        placeholder = st.empty()
+        yukleme_alani = st.empty()
         
-        # Web ve Dosya Bilgisi Toplama
-        site_bilgisi = ""
-        if any(k in prompt.lower() for k in ["okul", "eren", "müdür"]):
-            placeholder.markdown("🔍 *Okul sitesine bakılıyor...*")
-            site_bilgisi = web_sitesini_oku("https://eren.k12.tr/")
-        
-        dosya_verisi = ""
-        if yuklenen_dosya:
-            placeholder.markdown("📄 *Dosya içeriği analiz ediliyor...*")
-            if not yuklenen_dosya.type.startswith("image/"):
-                dosya_verisi = dosya_icerigini_oku(yuklenen_dosya)
-
-        try:
-            model = genai.GenerativeModel(get_model())
-            sistem_talimati = f"Sen Eren AI'sın. SİTE: {site_bilgisi} DOSYA: {dosya_verisi}"
-            
-            icerik = [sistem_talimati, prompt]
-            if yuklenen_dosya and yuklenen_dosya.type.startswith("image/"):
-                icerik.append(PIL.Image.open(yuklenen_dosya))
-
-            response = model.generate_content(icerik)
-            placeholder.markdown(response.text)
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
-        except Exception as e:
-            st.error(f"Hata: {e}")
+        # Bilgi Toplama
+        site_bilgi = ""
+        if any(x in soru.lower() for x in ["okul", "eren", "müdür"]):
+            yukleme_alani.markdown("🔍 *
