@@ -1,10 +1,9 @@
-google-generativeai
 streamlit
-pillow
-beautifulsoup4
+google-generativeai
+Pillow
 requests
-pypdf2
+beautifulsoup4
+PyPDF2
 python-docx
 pandas
 openpyxl
-python-pptx
