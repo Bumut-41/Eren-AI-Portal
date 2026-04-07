@@ -4,7 +4,7 @@ import PIL.Image
 import os
 
 # --- 1. AYARLAR ---
-st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️")
 
 # API Anahtarı
 if "GOOGLE_API_KEY" in st.secrets:
@@ -13,60 +13,47 @@ else:
     st.error("Secrets içinde API anahtarı bulunamadı!")
     st.stop()
 
-# --- 2. ARAYÜZ ---
-with st.sidebar:
-    st.title("🛡️ Eren AI")
-    if os.path.exists("Logo.png"):
-        st.image("Logo.png", width=150)
-    mod = st.selectbox("Mod", ["Asistan", "Akademik", "Veli"])
+# --- 2. MODELİ OTOMATİK BUL (404 HATASINI BİTİREN KISIM) ---
+@st.cache_resource
+def model_yukle():
+    # Sistemde çalışan tüm modelleri listele ve içinden flash olanı seç
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            if 'gemini-1.5-flash' in m.name:
+                return genai.GenerativeModel(m.name)
+    # Eğer özel isim bulunamazsa en temel olanı döndür
+    return genai.GenerativeModel('gemini-pro')
 
+model = model_yukle()
+
+# --- 3. ARAYÜZ ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Alanı
-yukle = st.file_uploader("Dosya Yükle", type=['png','jpg','pdf','docx'])
+yukle = st.file_uploader("Dosya Seç", type=['png', 'jpg', 'jpeg', 'pdf', 'docx'])
 soru = st.chat_input("Mesajınızı buraya yazın...")
 
-# Geçmişi Göster
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 3. İŞLEME MANTIĞI ---
+# --- 4. İŞLEME ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
-        alan.markdown("⚡ *İşleniyor...*")
-
         try:
-            # En güvenli model çağırma yöntemi
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            
-            payload = [f"Sen Eren AI'sın. Mod: {mod}", soru]
-            
+            payload = [f"Sen Eren AI'sın.", soru]
             if yukle and yukle.type.startswith("image/"):
                 payload.append(PIL.Image.open(yukle))
-
-            yanit = model.generate_content(payload)
             
-            if yanit.text:
-                alan.markdown(yanit.text)
-                st.session_state.messages.append({"role": "assistant", "content": yanit.text})
-            else:
-                alan.error("Model boş yanıt döndürdü.")
-                
+            yanit = model.generate_content(payload)
+            st.markdown(yanit.text)
+            st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            
         except Exception as e:
-            # Eğer hata verirse alternatif ismi dene
-            try:
-                model = genai.GenerativeModel('models/gemini-1.5-flash')
-                yanit = model.generate_content(payload)
-                alan.markdown(yanit.text)
-                st.session_state.messages.append({"role": "assistant", "content": yanit.text})
-            except Exception as e2:
-                alan.error(f"Bağlantı Hatası: {str(e2)}")
+            st.error(f"Hata detayı: {str(e)}")
