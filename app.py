@@ -1,12 +1,14 @@
 import streamlit as st
 import google.generativeai as genai
+from google.generativeai import client # Versiyonu zorlamak için gerekli
 import PIL.Image
 import os
 from PyPDF2 import PdfReader
 from docx import Document
 
-# --- 1. KRİTİK HATA DÜZELTMESİ (v1beta Hatası İçin) ---
-os.environ["GOOGLE_API_VERSION"] = "v1"
+# --- 1. API VERSİYONUNU ÇEKİRDEKTEN KİLİTLEME ---
+# Bu ayar, SDK'nın 'v1beta' yerine doğrudan 'v1' API uç noktasına bağlanmasını sağlar.
+client._API_VERSION = "v1" 
 
 # Sayfa Ayarları
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
@@ -17,11 +19,8 @@ else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- 2. ÖZEL KURUMSAL TANITIM ---
-EREN_AI_KIMLIK = """
-Merhaba! Ben **Eren AI**, Özel Eren Fen ve Teknoloji Lisesi asistanıyım. 
-Okulumuzun akademik vizyonuyla size destek olmak için buradayım.
-"""
+# --- 2. KURUMSAL KİMLİK ---
+EREN_AI_KIMLIK = "Ben Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin dijital asistanıyım."
 
 # --- 3. YARDIMCI FONKSİYONLAR ---
 def dosya_metnini_oku(yuklenen_dosya):
@@ -34,19 +33,14 @@ def dosya_metnini_oku(yuklenen_dosya):
             return "\n".join([para.text for para in doc.paragraphs])
         return None
     except Exception as e:
-        return f"Dosya okunurken hata oluştu: {e}"
+        return f"Hata: {e}"
 
-@st.cache_resource
-def model_getir():
-    # Hata almamak için doğrudan güncel modeli çağırıyoruz
-    return genai.GenerativeModel('gemini-1.5-flash')
+# Modeli en güncel ve kararlı sürümüyle tanımlıyoruz
+model_engine = genai.GenerativeModel('gemini-1.5-flash')
 
-model_engine = model_getir()
-
-# --- 4. ARAYÜZ (SIDEBAR) ---
+# --- 4. ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    # Logo yoksa hata vermemesi için kontrol
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
     st.divider()
@@ -66,12 +60,11 @@ with st.container():
     with c2:
         soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
-# Sohbet Geçmişi
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. AKILLI YANIT MOTORU ---
+# --- 5. ANALİZ VE YANIT ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
@@ -80,36 +73,32 @@ if soru:
     with st.chat_message("assistant"):
         alan = st.empty()
         
-        # KİMLİK SORGUSU
-        kimlik_sorulari = ["sen kimsin", "adın ne", "necisin", "kimsin sen", "kendini tanıt"]
-        if any(kelime in soru.lower() for kelime in kimlik_sorulari):
+        # Kimlik Sorgusu
+        if any(k in soru.lower() for k in ["kimsin", "adın ne"]):
             alan.markdown(EREN_AI_KIMLIK)
             st.session_state.messages.append({"role": "assistant", "content": EREN_AI_KIMLIK})
         else:
-            alan.markdown("⚡ *Bağlantı kuruluyor...*")
+            alan.markdown("⚡ *Bağlantı v1 üzerinden kuruluyor...*")
             try:
-                talimat = (
-                    "Sen Özel Eren Fen ve Teknoloji Lisesi'nin asistanısın. "
-                    f"Mod: {mod}. Profesyonel ve akademik bir dil kullan."
-                )
-                prompt = [talimat, soru]
+                prompt_list = [f"Sen Eren AI'sın. Mod: {mod}.", soru]
                 
-                # --- DOSYA OKUMA SİSTEMİ (BOZULMAYAN YAPI) ---
+                # Dosya Yüklüyse oku ve prompta ekle
                 if yukle:
                     if yukle.type.startswith("image/"):
-                        prompt.append(PIL.Image.open(yukle))
+                        prompt_list.append(PIL.Image.open(yukle))
                     else:
-                        metin = dosya_metnini_oku(yukle)
-                        if metin:
-                            # Dosya yüklüyse prompt'a doğrudan ekle (Burası okumayı garanti eder)
-                            prompt.append(f"\nBELGE İÇERİĞİ:\n{metin}")
+                        icerik = dosya_metnini_oku(yukle)
+                        if icerik:
+                            # Modelin dökümanı görmesi için net bir etiketle ekliyoruz
+                            prompt_list.append(f"\n[YÜKLENEN BELGE İÇERİĞİ]:\n{icerik}")
 
-                yanit = model_engine.generate_content(prompt)
+                # API Çağrısı
+                yanit = model_engine.generate_content(prompt_list)
                 
                 if yanit.text:
                     alan.markdown(yanit.text)
                     st.session_state.messages.append({"role": "assistant", "content": yanit.text})
-                
+            
             except Exception as e:
-                # 404 hatasını yakalayıp kullanıcıya v1'e geçildiğini bildirir
-                alan.error(f"Sistem Hatası: {str(e)}")
+                # Eğer hala 404 verirse burası hatayı detaylı gösterir
+                alan.error(f"Erişim Hatası: {str(e)}")
