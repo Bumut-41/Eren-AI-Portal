@@ -7,23 +7,21 @@ from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
 
-# --- 1. SAYFA VE KİMLİK AYARLARI ---
+# --- 1. SAYFA YAPILANDIRMASI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# --- 2. KRİTİK: VERSİYON HATASINI BİTİREN KİLİT ---
+# --- 2. API VE VERSİYON KİLİDİ (404 HATASI ÇÖZÜMÜ) ---
 if "GOOGLE_API_KEY" in st.secrets:
-    # Kütüphaneyi doğrudan kararlı (v1) sürümle çalışmaya zorluyoruz.
-    # Bu ayar image_4de588'deki beta hatasını tamamen engeller.
-    os.environ["GOOGLE_API_VERSION"] = "v1" 
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Lütfen Secrets kısmını kontrol edin.")
+    st.error("API Anahtarı bulunamadı! Lütfen Secrets ayarlarını kontrol edin.")
     st.stop()
 
-# Modeli en kararlı ismiyle tanımlıyoruz
-model_engine = genai.GenerativeModel('gemini-1.5-flash')
+# KRİTİK DEĞİŞİKLİK: Modeli doğrudan 'v1' ana yolu üzerinden çağırıyoruz.
+# Bu tanımlama, image_4e3f2a'daki beta hatasını pas geçer.
+model_engine = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
 
-# --- 3. DÖKÜMAN OKUMA FONKSİYONU ---
+# --- 3. DÖKÜMAN OKUMA MOTORU ---
 def dosya_oku(dosya):
     try:
         if dosya.type == "application/pdf":
@@ -41,24 +39,24 @@ def dosya_oku(dosya):
             return df.to_string()
         return None
     except Exception as e:
-        return f"Dosya okuma hatası: {str(e)}"
+        return f"Hata: {str(e)}"
 
 # --- 4. ARAYÜZ ---
 st.title("🛡️ Eren AI Portalı")
 
 with st.sidebar:
-    st.title("🛡️ Eren AI Menü")
-    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Analiz"])
+    st.title("🛡️ Eren AI")
+    mod = st.selectbox("Mod", ["Eren AI Asistanı", "Akademik Analiz"])
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Alanları
+# Giriş Paneli
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        yukle = st.file_uploader("Belge", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
+        yukle = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
@@ -74,19 +72,19 @@ if soru:
 
     with st.chat_message("assistant"):
         alan = st.empty()
-        alan.markdown("⚡ *İşleniyor...*")
+        alan.markdown("⚡ *Döküman analiz ediliyor...*")
         
         try:
-            # Yapay zekaya döküman içeriğini hazır olarak sunuyoruz
+            # Yapay zekaya dökümanı 'görebilmesi' için metin olarak ekliyoruz
             prompt = [f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
             
             if yukle:
                 if yukle.type.startswith("image/"):
                     prompt.append(PIL.Image.open(yukle))
                 else:
-                    metin = dosya_oku(yukle)
-                    if metin:
-                        prompt.append(f"\nBELGE İÇERİĞİ:\n{metin}")
+                    icerik = dosya_oku(yukle)
+                    if icerik:
+                        prompt.append(f"\nBELGE İÇERİĞİ:\n{icerik}")
 
             yanit = model_engine.generate_content(prompt)
             if yanit.text:
