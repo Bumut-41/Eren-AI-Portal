@@ -7,95 +7,95 @@ from bs4 import BeautifulSoup
 import PyPDF2
 from docx import Document
 import pandas as pd
-from pptx import Presentation
 
-# --- 1. AYARLAR ---
+# --- 1. SİSTEM AYARLARI VE HIZLANDIRMA ---
 st.set_page_config(page_title="Eren AI", page_icon="🛡️", layout="wide")
 
-# Önbelleğe alarak hızı artırıyoruz
 @st.cache_data(ttl=3600)
-def site_oku_hizli(url):
+def okul_sitesi_oku(url):
     try:
-        r = requests.get(url, timeout=5) # Zaman aşımını 5 saniyeye düşürdük
+        r = requests.get(url, timeout=5)
         soup = BeautifulSoup(r.text, 'html.parser')
-        # Sadece ana metin alanlarını alarak hızı artırıyoruz
         for s in soup(["script", "style", "nav", "footer"]): s.extract()
-        return soup.get_text()[:2000] # Veri miktarını azalttık
+        return soup.get_text()[:2000]
     except: return ""
 
-def dosya_oku_hizli(dosya):
-    isim = dosya.name.lower()
+def belge_icerigini_al(dosya):
     try:
+        isim = dosya.name.lower()
         if isim.endswith('.pdf'):
-            okuyucu = PyPDF2.PdfReader(dosya)
-            return "\n".join([s.extract_text() for s in okuyucu.pages[:3]]) # İlk 3 sayfa sınırı
+            pdf = PyPDF2.PdfReader(dosya)
+            return "".join([p.extract_text() for p in pdf.pages[:3]])[:3000]
         elif isim.endswith('.docx'):
             doc = Document(dosya)
-            return "\n".join([p.text for p in doc.paragraphs[:50]]) # İlk 50 paragraf
+            return "\n".join([p.text for p in doc.paragraphs[:50]])
         elif isim.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(dosya)
-            return df.head(20).to_string() # Sadece ilk 20 satır
+            return pd.read_excel(dosya).head(15).to_string()
         return ""
-    except: return "Dosya hızlı okunamadı."
+    except Exception: return "Dosya okuma hatası."
 
-# --- 2. API YAPILANDIRMASI ---
+# --- 2. API VE MODEL YAPILANDIRMASI (404 ÇÖZÜMÜ) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Key eksik!")
+    st.error("Lütfen Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# --- 3. ARAYÜZ ---
+# Kararlı model ismi kullanımı
+MODEL_ID = "models/gemini-1.5-flash"
+
+# --- 3. ARAYÜZ VE YAN ÇUBUK ---
 with st.sidebar:
-    st.title("🛡️ Eren AI")
+    st.title("🛡️ Eren AI Menü")
     if os.path.exists("Logo.png"): st.image("Logo.png", width=120)
-    modul = st.selectbox("Mod", ["Eren AI Asistanı", "Akademik", "Veli"])
+    mod = st.selectbox("Asistan Modu:", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
+    st.divider()
+    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Bölümü
-c1, c2 = st.columns([1, 5])
-with c1:
-    yukle = st.file_uploader("Dosya", type=['png','jpg','pdf','docx','xlsx','pptx'], label_visibility="collapsed")
-with c2:
-    soru = st.chat_input("Hızlıca sorun...")
+# Dosya Yükleme ve Giriş Alanı
+with st.container():
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        yuklenen_dosya = st.file_uploader("Ek", type=['png','jpg','pdf','docx','xlsx'], label_visibility="collapsed")
+    with c2:
+        soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
+# Geçmiş Mesajları Görüntüle
 for m in st.session_state.messages:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# --- 4. HIZLI YANIT DÖNGÜSÜ ---
+# --- 4. AKILLI İŞLEME DÖNGÜSÜ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.empty()
-        durum.markdown("⚡ *İşleniyor...*")
+        durum_alani = st.empty()
+        durum_alani.markdown("⚡ *Yanıt hazırlanıyor...*")
         
-        site_bilgi = ""
-        if any(k in soru.lower() for k in ["okul", "eren", "müdür"]):
-            site_bilgi = site_oku_hizli("https://eren.k12.tr/")
+        # Sadece okul ile ilgili sorularda siteyi tara (Hız için)
+        site_bilgisi = ""
+        if any(k in soru.lower() for k in ["eren", "okul", "müdür", "lider"]):
+            site_bilgisi = okul_sitesi_oku("https://eren.k12.tr/")
         
-        dosya_bilgi = ""
-        if yukle and not yukle.type.startswith("image/"):
-            dosya_bilgi = dosya_oku_hizli(yukle)
+        belge_bilgisi = belge_icerigini_al(yuklenen_dosya) if (yuklenen_dosya and not yuklenen_dosya.type.startswith("image/")) else ""
 
         try:
-            # Model isminden 'models/' kısmını kesin olarak çıkardık (404 çözümü)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel(MODEL_ID)
+            baglam = f"Sen Eren AI'sın. Mod: {mod}. Kaynaklar: {site_bilgisi} {belge_bilgisi}"
             
-            prompt_ozet = f"Sistem: {modul}. Veri: {site_bilgi} {dosya_bilgi}"
-            
-            girdi = [prompt_ozet, soru]
-            if yukle and yukle.type.startswith("image/"):
-                girdi.append(PIL.Image.open(yukle))
+            girdi_listesi = [baglam, soru]
+            if yuklenen_dosya and yuklenen_dosya.type.startswith("image/"):
+                girdi_listesi.append(PIL.Image.open(yuklenen_dosya))
 
-            yanit = model.generate_content(girdi)
-            durum.markdown(yanit.text)
+            yanit = model.generate_content(girdi_listesi)
+            durum_alani.markdown(yanit.text)
             st.session_state.messages.append({"role": "assistant", "content": yanit.text})
             
         except Exception as e:
-            st.error(f"Hız Hatası: {e}")
+            durum_alani.error("Bağlantı hatası: API anahtarınızı veya kotanızı kontrol edin.")
