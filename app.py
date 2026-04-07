@@ -7,7 +7,7 @@ from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
 
-# --- 1. KURUMSAL KİMLİK VE AYARLAR ---
+# --- 1. KURUMSAL AYARLAR ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 EREN_AI_KIMLIK = """
@@ -15,19 +15,19 @@ Merhaba! Ben **Eren AI**, Özel Eren Fen ve Teknoloji Lisesi için geliştirilmi
 Dökümanlarınızı (PDF, Word, Excel, PowerPoint) analiz edebilir ve akademik çalışmalarınızda size destek olabilirim.
 """
 
-# --- 2. 404 HATASINI BİTİREN ÖZEL YAPILANDIRMA ---
+# --- 2. 404 HATASINI BİTİREN KARARLI YAPILANDIRMA ---
 if "GOOGLE_API_KEY" in st.secrets:
-    # KRİTİK: 'v1beta' hatasını aşmak için en kararlı sürümü (stable) zorunlu kılıyoruz
+    # Kararsız 'v1beta' yerine doğrudan ana kütüphaneyi yapılandırıyoruz
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Lütfen Secrets ayarlarını kontrol edin.")
+    st.error("API Anahtarı bulunamadı! Secrets ayarlarını kontrol edin.")
     st.stop()
 
-# Doğrudan model ismini belirterek beta sürüm kısıtlamalarından kurtuluyoruz
-model_engine = genai.GenerativeModel(model_name='gemini-1.5-flash')
+# Modeli en güncel ve kararlı ismiyle çağırıyoruz
+model_engine = genai.GenerativeModel('gemini-1.5-flash')
 
-# --- 3. DOSYA OKUMA MOTORU (WEB TARAFLI) ---
-def dosya_metnini_ayikla(dosya):
+# --- 3. SUNUCU TARAFLI BELGE OKUMA SİSTEMİ ---
+def belgeyi_metne_cevir(dosya):
     try:
         if dosya.type == "application/pdf":
             reader = PdfReader(dosya)
@@ -44,9 +44,9 @@ def dosya_metnini_ayikla(dosya):
             return f"Tablo Verisi:\n{df.to_string()}"
         return None
     except Exception as e:
-        return f"Dosya Okuma Hatası: {str(e)}"
+        return f"Döküman okunamadı: {str(e)}"
 
-# --- 4. ARAYÜZ TASARIMI ---
+# --- 4. ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
     if os.path.exists("Logo.png"):
@@ -60,19 +60,19 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Dosya Yükleme Paneli
+# Giriş Bölümü
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        yukle = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
+        yukle = st.file_uploader("Belge", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya bir soru sorun...")
+        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. ANALİZ VE YANIT MOTORU ---
+# --- 5. YANIT MOTORU VE DOSYA ENJEKSİYONU ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
@@ -87,19 +87,19 @@ if soru:
         else:
             cevap_alani.markdown("⚡ *Döküman analiz ediliyor...*")
             try:
-                # Prompt listesi
+                # Prompt hazırlığı
                 prompt_parcalari = [f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
                 
-                # Asistanın "dosyayı göremiyorum" demesini engelleyen enjeksiyon
+                # Asistanın dosyayı görebilmesi için metin enjeksiyonu yapıyoruz
                 if yukle:
                     if yukle.type.startswith("image/"):
                         prompt_parcalari.append(PIL.Image.open(yukle))
                     else:
-                        icerik = dosya_metnini_ayikla(yukle)
+                        icerik = belgeyi_metne_cevir(yukle)
                         if icerik:
-                            prompt_parcalari.append(f"\n--- DOSYA İÇERİĞİ ---\n{icerik}")
+                            prompt_parcalari.append(f"\n--- ANALİZ EDİLEN DÖKÜMAN ---\n{icerik}")
 
-                # Modelden yanıt al (404 almamak için v1beta kullanmıyoruz)
+                # Kararlı sürüm üzerinden yanıt alma
                 yanit = model_engine.generate_content(prompt_parcalari)
                 if yanit.text:
                     cevap_alani.markdown(yanit.text)
