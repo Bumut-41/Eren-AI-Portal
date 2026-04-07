@@ -8,18 +8,15 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from pptx import Presentation
-import io
 
-# --- 1. SAYFA VE YAN ÇUBUK AYARLARI (Sidebar Sabitlendi) ---
+# --- 1. SAYFA AYARLARI VE SABİT YAN ÇUBUK ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# Yan çubuğu her zaman en başta tanımlıyoruz ki kaybolmasın
+# Yan çubuğu en başta tanımlıyoruz ki hiçbir hata onu yok edemesin
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
-    else:
-        st.info("Logo.png bulunamadı.")
     
     modul = st.selectbox(
         "Asistan Modu", 
@@ -41,52 +38,51 @@ def dosya_cozucu(dosya):
             metin = "\n".join([p.text for p in doc.paragraphs])
         elif isim.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(dosya)
-            metin = "Tablo Verileri:\n" + df.to_string()
+            metin = "Excel Tablo Verisi:\n" + df.to_string()
         elif isim.endswith('.pptx'):
             sunum = Presentation(dosya)
             for slayt in sunum.slides:
                 for sekil in slayt.shapes:
                     if hasattr(sekil, "text"): metin += sekil.text + "\n"
-        return f"\n[Dosya İçeriği: {isim}]\n{metin}"
+        return f"\n[Yüklenen Belge İçeriği]:\n{metin}"
     except Exception as e:
         return f"\n[Dosya Okuma Hatası]: {str(e)}"
 
 # --- 3. WEB TARAMA ---
 def site_oku(url):
     try:
-        r = requests.get(url, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, 'html.parser')
         for s in soup(["script", "style"]): s.extract()
         return soup.get_text()[:3000]
     except: return ""
 
-# --- 4. API VE MODEL DOĞRULAMA (404 Çözücü) ---
+# --- 4. API VE MODEL DOĞRULAMA (404 Kesin Çözüm) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Lütfen Streamlit Secrets'a GOOGLE_API_KEY ekleyin.")
+    st.error("API Anahtarı (GOOGLE_API_KEY) bulunamadı!")
     st.stop()
 
-# Hata almamak için sistemdeki uygun model ismini buluyoruz
-@st.cache_resource
-def model_bul():
-    return "gemini-1.5-flash" # Genel hata alan 'models/' ekini kaldırdık
+# 404 hatasını önlemek için doğrudan model ismini kullanıyoruz
+WORKING_MODEL = "gemini-1.5-flash"
 
-# --- 5. ARAYÜZ VE SOHBET ---
+# --- 5. ANA EKRAN VE SOHBET ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Alanı
+# Dosya Yükleme ve Giriş Alanı
 with st.container(border=True):
     c1, c2 = st.columns([1, 4])
     with c1:
-        yukle = st.file_uploader("Dosya Seç", type=['png','jpg','pdf','docx','xlsx','pptx'], label_visibility="collapsed")
+        yukle = st.file_uploader("Dosya Seç", type=['png','jpg','jpeg','pdf','docx','xlsx','pptx'], label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya sor...")
+        soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
-# Geçmişi Yazdır
+# Sohbet Geçmişi
 for m in st.session_state.messages:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
@@ -96,9 +92,20 @@ if soru:
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        yukleme_alani = st.empty()
+        durum = st.empty()
         
-        # Bilgi Toplama
-        site_bilgi = ""
-        if any(x in soru.lower() for x in ["okul", "eren", "müdür"]):
-            yukleme_alani.markdown("🔍 *
+        # 1. Okul Bilgisi Gerekli mi? (Tetikleyici)
+        site_verisi = ""
+        okul_anahtar = ["okul", "eren", "müdür", "lise", "kolej", "personel"]
+        if any(kelime in soru.lower() for kelime in okul_anahtar):
+            durum.markdown("🔍 *Eren Koleji web sitesi inceleniyor...*")
+            site_verisi = site_oku("https://eren.k12.tr/")
+        
+        # 2. Belge Bilgisi Gerekli mi?
+        belge_verisi = ""
+        if yukle and not yukle.type.startswith("image/"):
+            durum.markdown("📄 *Yüklenen belge okunuyor...*")
+            belge_verisi = dosya_cozucu(yukle)
+        
+        if not site_verisi and not belge_verisi:
+            durum.markdown("🛡️ *Eren AI yanıt hazırlıyor...*")
