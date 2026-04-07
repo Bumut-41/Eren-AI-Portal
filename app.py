@@ -2,47 +2,61 @@ import streamlit as st
 import google.generativeai as genai
 import PIL.Image
 import os
-import requests
-from bs4 import BeautifulSoup
-import PyPDF2
+from PyPDF2 import PdfReader
 from docx import Document
 
-# --- 1. AYARLAR ---
-st.set_page_config(page_title="Eren AI", page_icon="🛡️", layout="wide")
+# --- 1. SAYFA AYARLARI ---
+st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-@st.cache_data(ttl=3600)
-def siteyi_tara(url):
-    try:
-        r = requests.get(url, timeout=5)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        for s in soup(["script", "style", "nav", "footer"]): s.extract()
-        return soup.get_text()[:1500]
-    except: return ""
-
-def belge_oku(dosya):
-    try:
-        if dosya.name.lower().endswith('.pdf'):
-            reader = PyPDF2.PdfReader(dosya)
-            return "".join([p.extract_text() for p in reader.pages[:3]])[:3000]
-        elif dosya.name.lower().endswith('.docx'):
-            return "\n".join([p.text for p in Document(dosya).paragraphs[:50]])
-        return ""
-    except: return "Belge okunamadı."
-
-# --- 2. API YAPILANDIRMASI (ARTIK AKTİF!) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("Secrets kısmına API anahtarınızı ekleyin!")
+    st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-MODEL_ID = "gemini-1.5-flash"
+# --- 2. ÖZEL KURUMSAL TANITIM METNİ ---
+EREN_AI_KIMLIK = """
+Merhaba! Ben **Eren AI**, Özel Eren Fen ve Teknoloji Lisesi için özel olarak geliştirilmiş yapay zeka asistanıyım. 
 
-# --- 3. ARAYÜZ ---
+Temel amacım; okulumuzun yenilikçi ve teknoloji odaklı eğitim vizyonu doğrultusunda öğrencilerimize, öğretmenlerimize ve idari kadromuza kapsamlı bir akademik destek sağlamaktır. 
+Derslerinizde karşılaştığınız zorlukları aşmanıza yardımcı olmak, projelerinizde fikir ortağınız olmak ve eğitim süreçlerinizi daha verimli hale getirmek için buradayım. 
+
+Özel Eren Fen ve Teknoloji Lisesi'nin kurumsal değerlerini temsil ederek; profesyonel, yardımcı ve çözüm odaklı bir yaklaşımla her türlü sorunuzda yanınızdayım.
+"""
+
+# --- 3. YARDIMCI FONKSİYONLAR ---
+def dosya_metnini_oku(yuklenen_dosya):
+    try:
+        if yuklenen_dosya.type == "application/pdf":
+            reader = PdfReader(yuklenen_dosya)
+            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+        elif yuklenen_dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = Document(yuklenen_dosya)
+            return "\n".join([para.text for para in doc.paragraphs])
+        return None
+    except Exception as e:
+        return f"Dosya okunurken hata oluştu: {e}"
+
+@st.cache_resource
+def model_getir():
+    try:
+        mevcut_modeller = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        for tercih in ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro']:
+            if tercih in mevcut_modeller:
+                return genai.GenerativeModel(tercih)
+        return genai.GenerativeModel(mevcut_modeller[0])
+    except:
+        return genai.GenerativeModel('gemini-1.5-flash')
+
+model_engine = model_getir()
+
+# --- 4. ARAYÜZ (SIDEBAR) ---
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    if os.path.exists("Logo.png"): st.image("Logo.png", width=120)
-    mod = st.selectbox("Mod:", ["Eren AI Asistanı", "Akademik Destek"])
+    if os.path.exists("Logo.png"):
+        st.image("Logo.png", width=150)
+    st.divider()
+    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 st.title("🛡️ Eren AI Portalı")
@@ -50,40 +64,58 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Dosya ve Soru Girişi
-c1, c2 = st.columns([1, 4])
-with c1:
-    dosya = st.file_uploader("Dosya", type=['png','jpg','pdf','docx'], label_visibility="collapsed")
-with c2:
-    soru = st.chat_input("Eren AI'ya bir soru sorun...")
+with st.container():
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        yukle = st.file_uploader("Dosya", type=['png','jpg','jpeg','pdf','docx'], label_visibility="collapsed")
+    with c2:
+        soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
 for m in st.session_state.messages:
-    with st.chat_message(m["role"]): st.markdown(m["content"])
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# --- 4. YANIT ÜRETİMİ ---
+# --- 5. AKILLI YANIT MOTORU ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
-    with st.chat_message("user"): st.markdown(soru)
+    with st.chat_message("user"):
+        st.markdown(soru)
 
     with st.chat_message("assistant"):
-        placeholder = st.empty()
-        placeholder.markdown("⚡ *Bağlantı kuruluyor...*")
+        alan = st.empty()
         
-        # Okul verisi ve Belge verisi hazırlığı
-        site_verisi = siteyi_tara("https://eren.k12.tr/") if "eren" in soru.lower() else ""
-        belge_verisi = belge_oku(dosya) if (dosya and not dosya.type.startswith("image/")) else ""
+        # KİMLİK SORGUSU KONTROLÜ
+        kimlik_sorulari = ["sen kimsin", "adın ne", "necisin", "kimsin sen", "kendini tanıt"]
+        if any(kelime in soru.lower() for kelime in kimlik_sorulari):
+            alan.markdown(EREN_AI_KIMLIK)
+            st.session_state.messages.append({"role": "assistant", "content": EREN_AI_KIMLIK})
+        else:
+            alan.markdown("⚡ *Bağlantı kuruluyor...*")
+            try:
+                # Arka plan talimatı
+                talimat = (
+                    "Sen Özel Eren Fen ve Teknoloji Lisesi'nin yapay zeka asistanı Eren AI'sın. "
+                    f"Şu an '{mod}' modundasın. Daima profesyonel, nazik ve akademik bir dil kullan."
+                )
+                prompt = [talimat, soru]
+                
+                # Akıllı Odaklanma Kontrolü
+                dosya_kelimeleri = ["dosya", "belge", "doküman", "pdf", "word", "içerik", "yüklediğim"]
+                dosyadan_bahsediyor = any(k in soru.lower() for k in dosya_kelimeleri)
 
-        try:
-            model = genai.GenerativeModel(MODEL_ID)
-            baglam = f"Sen Eren AI'sın. Veriler: {site_verisi} {belge_verisi}"
-            
-            payload = [baglam, soru]
-            if dosya and dosya.type.startswith("image/"):
-                payload.append(PIL.Image.open(dosya))
+                if yukle:
+                    if yukle.type.startswith("image/"):
+                        prompt.append(PIL.Image.open(yukle))
+                    elif dosyadan_bahsediyor:
+                        metin = dosya_metnini_oku(yukle)
+                        if metin:
+                            prompt.append(f"\n--- YÜKLENEN BELGE ---\n{metin}")
 
-            yanit = model.generate_content(payload)
-            placeholder.markdown(yanit.text)
-            st.session_state.messages.append({"role": "assistant", "content": yanit.text})
-            
-        except Exception:
-            placeholder.error("Bağlantı başarılı ancak yanıt üretilirken bir hata oluştu. Sayfayı yenileyip tekrar deneyin.")
+                yanit = model_engine.generate_content(prompt)
+                
+                if yanit.text:
+                    alan.markdown(yanit.text)
+                    st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+                
+            except Exception as e:
+                alan.error(f"Sistem Hatası: {str(e)}")
