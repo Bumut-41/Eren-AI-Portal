@@ -53,7 +53,7 @@ with st.sidebar:
     st.divider()
     mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
     st.divider()
-    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
+    st.caption("© Baris Umut / 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 # Ana Ekran Başlığı
 st.title("🛡️ Eren AI Portalı")
