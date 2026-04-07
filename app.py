@@ -5,7 +5,11 @@ import os
 from PyPDF2 import PdfReader
 from docx import Document
 
-# --- 1. SAYFA AYARLARI ---
+# --- 1. SİSTEM KİLİDİ (404 HATASINI ÖNLER) ---
+# Kütüphanenin hata veren v1beta sürümüne gitmesini engellemek için v1'e sabitliyoruz.
+os.environ["GOOGLE_API_VERSION"] = "v1"
+
+# Sayfa Ayarları
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
@@ -17,11 +21,7 @@ else:
 # --- 2. ÖZEL KURUMSAL TANITIM METNİ ---
 EREN_AI_KIMLIK = """
 Merhaba! Ben **Eren AI**, Özel Eren Fen ve Teknoloji Lisesi için özel olarak geliştirilmiş yapay zeka asistanıyım. 
-
-Temel amacım; okulumuzun yenilikçi ve teknoloji odaklı eğitim vizyonu doğrultusunda öğrencilerimize, öğretmenlerimize ve idari kadromuza kapsamlı bir akademik destek sağlamaktır. 
-Derslerinizde karşılaştığınız zorlukları aşmanıza yardımcı olmak, projelerinizde fikir ortağınız olmak ve eğitim süreçlerinizi daha verimli hale getirmek için buradayım. 
-
-Özel Eren Fen ve Teknoloji Lisesi'nin kurumsal değerlerini temsil ederek; profesyonel, yardımcı ve çözüm odaklı bir yaklaşımla her türlü sorunuzda yanınızdayım.
+Okulumuzun vizyonu doğrultusunda akademik süreçlerinizde size destek olmak için buradayım.
 """
 
 # --- 3. YARDIMCI FONKSİYONLAR ---
@@ -29,7 +29,11 @@ def dosya_metnini_oku(yuklenen_dosya):
     try:
         if yuklenen_dosya.type == "application/pdf":
             reader = PdfReader(yuklenen_dosya)
-            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            # Tüm sayfaları birleştir
+            metin = ""
+            for page in reader.pages:
+                metin += page.extract_text() + "\n"
+            return metin
         elif yuklenen_dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = Document(yuklenen_dosya)
             return "\n".join([para.text for para in doc.paragraphs])
@@ -39,14 +43,8 @@ def dosya_metnini_oku(yuklenen_dosya):
 
 @st.cache_resource
 def model_getir():
-    try:
-        mevcut_modeller = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        for tercih in ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro']:
-            if tercih in mevcut_modeller:
-                return genai.GenerativeModel(tercih)
-        return genai.GenerativeModel(mevcut_modeller[0])
-    except:
-        return genai.GenerativeModel('gemini-1.5-flash')
+    # En kararlı modeli doğrudan çağırıyoruz
+    return genai.GenerativeModel('gemini-1.5-flash')
 
 model_engine = model_getir()
 
@@ -64,6 +62,7 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Giriş Alanları
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
@@ -71,6 +70,7 @@ with st.container():
     with c2:
         soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
+# Sohbet Geçmişini Göster
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
@@ -90,28 +90,30 @@ if soru:
             alan.markdown(EREN_AI_KIMLIK)
             st.session_state.messages.append({"role": "assistant", "content": EREN_AI_KIMLIK})
         else:
-            alan.markdown("⚡ *Bağlantı kuruluyor...*")
+            alan.markdown("⚡ *Döküman analiz ediliyor ve yanıt üretiliyor...*")
             try:
                 # Arka plan talimatı
                 talimat = (
                     "Sen Özel Eren Fen ve Teknoloji Lisesi'nin yapay zeka asistanı Eren AI'sın. "
-                    f"Şu an '{mod}' modundasın. Daima profesyonel, nazik ve akademik bir dil kullan."
+                    f"Şu an '{mod}' modundasın. Daima profesyonel ve akademik bir dil kullan. "
+                    "Eğer sana bir döküman veya görsel verildiyse, yanıtlarını o içeriğe dayandır."
                 )
-                prompt = [talimat, soru]
                 
-                # Akıllı Odaklanma Kontrolü
-                dosya_kelimeleri = ["dosya", "belge", "doküman", "pdf", "word", "içerik", "yüklediğim"]
-                dosyadan_bahsediyor = any(k in soru.lower() for k in dosya_kelimeleri)
-
+                prompt_parcalari = [talimat, soru]
+                
+                # --- DOSYA OKUMA VE ENJEKSİYON (GÜNCELLENEN KISIM) ---
                 if yukle:
                     if yukle.type.startswith("image/"):
-                        prompt.append(PIL.Image.open(yukle))
-                    elif dosyadan_bahsediyor:
-                        metin = dosya_metnini_oku(yukle)
-                        if metin:
-                            prompt.append(f"\n--- YÜKLENEN BELGE ---\n{metin}")
+                        prompt_parcalari.append(PIL.Image.open(yukle))
+                    else:
+                        # SORUYA BAKMAKSIZIN: Dosya varsa içeriğini oku ve prompt'a ekle
+                        metin_icerigi = dosya_metnini_oku(yukle)
+                        if metin_icerigi:
+                            # İçeriği döküman etiketiyle ekliyoruz
+                            prompt_parcalari.append(f"\n[SİSTEM: Kullanıcı bir döküman yükledi. Döküman İçeriği:]\n{metin_icerigi}")
 
-                yanit = model_engine.generate_content(prompt)
+                # Yanıt üret
+                yanit = model_engine.generate_content(prompt_parcalari)
                 
                 if yanit.text:
                     alan.markdown(yanit.text)
