@@ -3,3 +3,8 @@ streamlit
 pillow
 beautifulsoup4
 requests
+pypdf2
+python-docx
+pandas
+openpyxl
+python-pptx
