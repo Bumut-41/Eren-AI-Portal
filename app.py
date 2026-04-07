@@ -41,7 +41,7 @@ else:
     st.error("Secrets içinde GOOGLE_API_KEY bulunamadı!")
     st.stop()
 
-# --- 3. ARAYÜZ VE SOHBET ---
+# --- 3. ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI")
     if os.path.exists("Logo.png"):
@@ -53,46 +53,43 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Bölümü
+# Giriş Alanı
 c1, c2 = st.columns([1, 4])
 with c1:
     yukle = st.file_uploader("Dosya", type=['png','jpg','pdf','docx'], label_visibility="collapsed")
 with c2:
-    soru = st.chat_input("Sorunuzu buraya yazın...")
+    soru = st.chat_input("Mesajınızı yazın...")
 
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 4. YANIT MOTORU (HATASIZ BLOK YAPISI) ---
+# --- 4. YANIT MOTORU ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
-        alan.markdown("⚡ *İşleniyor...*")
+        placeholder = st.empty()
+        placeholder.markdown("⚡ *Düşünülüyor...*")
         
         # Veri toplama
         site_v = web_sitesi_oku("https://eren.k12.tr/") if "eren" in soru.lower() else ""
         belge_v = belge_oku(yukle) if (yukle and not yukle.type.startswith("image/")) else ""
 
         try:
-            # Model Çağrısı
             model = genai.GenerativeModel("gemini-1.5-flash")
-            baglam = f"Sen Eren AI'sın. Mod: {mod}. Veriler: {site_v} {belge_v}"
+            komut = f"Sen Eren AI'sın. Mod: {mod}. Veriler: {site_v} {belge_v}"
             
-            payload = [baglam, soru]
+            icerik = [komut, soru]
             if yukle and yukle.type.startswith("image/"):
-                payload.append(PIL.Image.open(yukle))
+                icerik.append(PIL.Image.open(yukle))
 
-            yanit = model.generate_content(payload)
+            yanit = model.generate_content(icerik)
             
             if yanit:
-                alan.markdown(yanit.text)
+                placeholder.markdown(yanit.text)
                 st.session_state.messages.append({"role": "assistant", "content": yanit.text})
-            else:
-                alan.error("Modelden yanıt alınamadı.")
         except Exception as e:
-            alan.error(f"Hata: {str(e)}")
+            placeholder.error(f"Hata oluştu: {str(e)}")
