@@ -2,48 +2,64 @@ import streamlit as st
 import google.generativeai as genai
 import PIL.Image
 import os
+import requests
+from bs4 import BeautifulSoup
 
-# --- 1. GÖRSEL AYARLAR ---
+# --- 1. GÖRSEL AYARLAR VE SOL MENÜ ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
-    
     modul = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
     st.divider()
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
-# --- 2. API VE MODEL DOĞRULAMA (HATA ÇÖZÜCÜ) ---
+# --- 2. API VE MODEL DOĞRULAMA ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
     st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
     st.stop()
 
-# 404 HATASINI BİTİREN FONKSİYON: Senin sisteminde hangi isim çalışıyorsa onu bulur
+# 404 hatasını önlemek için model ismini otomatik bulan yapı
 @st.cache_resource
 def get_model_name():
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                # Önce 1.5 Flash, yoksa Pro, o da yoksa ilk bulduğunu seç
                 if 'gemini-1.5-flash' in m.name: return m.name
-                if 'gemini-pro' in m.name: return m.name
-        return "models/gemini-1.5-flash" 
+        return "gemini-1.5-flash"
     except:
-        return "gemini-pro"
+        return "gemini-1.5-flash"
 
 working_model = get_model_name()
 
-# --- 3. ANA EKRAN VE DOSYA YÜKLEME ---
+# --- 3. CANLI WEB TARAMA FONKSİYONU ---
+def web_sitesini_oku(url):
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'} # Siteye erişim için tarayıcı kimliği
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        # Script ve stil dosyalarını temizle
+        for script in soup(["script", "style"]):
+            script.extract()
+        metin = soup.get_text()
+        # Temizlik
+        lines = (line.strip() for line in metin.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        return "\n".join(chunk for chunk in chunks if chunk)[:4000] # İlk 4000 karakter
+    except Exception as e:
+        return f"Siteye ulaşılamadı: {str(e)}"
+
+# --- 4. ANA EKRAN ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Dosya yükleme ve giriş yan yana
+# Giriş ve Dosya Yükleme
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
@@ -55,7 +71,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 4. AKILLI CEVAP MOTORU ---
+# --- 5. AKILLI TETİKLEYİCİ VE CEVAP MOTORU ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -64,29 +80,41 @@ if prompt:
     with st.chat_message("assistant"):
         placeholder = st.empty()
         
+        # ANAHTAR KELİME KONTROLÜ (Tetikleyici)
+        okul_terimleri = ["okul", "eren koleji", "fen ve teknoloji lisesi", "lise", "eren", "müdür", "kadro"]
+        site_verisi = ""
+        
+        # Eğer kullanıcı okul hakkında bir şey soruyorsa siteye git
+        if any(term in prompt.lower() for term in okul_terimleri):
+            placeholder.markdown("🔍 *Eren Koleji web sitesinde güncel bilgiler araştırılıyor...*")
+            site_verisi = web_sitesini_oku("https://eren.k12.tr/")
+        else:
+            placeholder.markdown("🛡️ *Eren AI yanıt hazırlıyor...*")
+
         try:
             model = genai.GenerativeModel(working_model)
             
-            # SADELEŞTİRİLMİŞ TALİMAT: Bilgileri biliyor ama zorla söylemiyor
-            sistem_mesaji = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. 
-            Müdür: Mert Kadıoğlu, Müdür Yrd: Damla İskender. 
-            Bu isimleri sadece sorulursa kullan. Her cevabın sonuna ekleme. 
-            Kısa ve öz yanıt ver. Mod: {modul}
+            # Sistem Talimatı
+            sistem_talimati = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın.
+            
+            CANLI WEB VERİSİ:
+            {site_verisi if site_verisi else "Okul dışı bir konu konuşuluyor."}
+            
+            TALİMAT: 
+            1. Eğer yukarıda okul verisi varsa, okul hakkındaki soruları buna göre cevapla.
+            2. Eğer veri yoksa genel kültür bilgilerinle cevap ver.
+            3. Her cevabın sonunda okul kadrosunu listeleme, sadece sorulursa söyle.
+            4. Cevapların kısa, öz ve profesyonel olsun. Mod: {modul}
             """
 
-            # İçeriği güvenli liste formatında gönder
-            icerik = [sistem_mesaji, prompt]
-            
+            icerik = [sistem_talimati, prompt]
             if yuklenen_dosya and yuklenen_dosya.type.startswith("image/"):
-                img = PIL.Image.open(yuklenen_dosya)
-                icerik.append(img)
+                icerik.append(PIL.Image.open(yuklenen_dosya))
 
             response = model.generate_content(icerik)
-            
             placeholder.markdown(response.text)
             st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            st.error(f"Bağlantı Hatası: {str(e)}")
-            st.info(f"Denenen Model: {working_model}")
+            st.error(f"Hata oluştu: {str(e)}")
