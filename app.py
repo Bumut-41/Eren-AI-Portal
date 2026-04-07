@@ -9,103 +9,93 @@ from docx import Document
 import pandas as pd
 from pptx import Presentation
 
-# --- 1. SAYFA AYARLARI VE SABİT YAN ÇUBUK ---
-st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
+# --- 1. AYARLAR ---
+st.set_page_config(page_title="Eren AI", page_icon="🛡️", layout="wide")
 
-# Yan çubuğu en başta tanımlıyoruz ki hiçbir hata onu yok edemesin
-with st.sidebar:
-    st.title("🛡️ Eren AI Menü")
-    if os.path.exists("Logo.png"):
-        st.image("Logo.png", width=150)
-    
-    modul = st.selectbox(
-        "Asistan Modu", 
-        ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"]
-    )
-    st.divider()
-    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
+# Önbelleğe alarak hızı artırıyoruz
+@st.cache_data(ttl=3600)
+def site_oku_hizli(url):
+    try:
+        r = requests.get(url, timeout=5) # Zaman aşımını 5 saniyeye düşürdük
+        soup = BeautifulSoup(r.text, 'html.parser')
+        # Sadece ana metin alanlarını alarak hızı artırıyoruz
+        for s in soup(["script", "style", "nav", "footer"]): s.extract()
+        return soup.get_text()[:2000] # Veri miktarını azalttık
+    except: return ""
 
-# --- 2. DOSYA OKUMA MOTORU ---
-def dosya_cozucu(dosya):
-    metin = ""
+def dosya_oku_hizli(dosya):
     isim = dosya.name.lower()
     try:
         if isim.endswith('.pdf'):
             okuyucu = PyPDF2.PdfReader(dosya)
-            for sayfa in okuyucu.pages: metin += sayfa.extract_text() + "\n"
+            return "\n".join([s.extract_text() for s in okuyucu.pages[:3]]) # İlk 3 sayfa sınırı
         elif isim.endswith('.docx'):
             doc = Document(dosya)
-            metin = "\n".join([p.text for p in doc.paragraphs])
+            return "\n".join([p.text for p in doc.paragraphs[:50]]) # İlk 50 paragraf
         elif isim.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(dosya)
-            metin = "Excel Tablo Verisi:\n" + df.to_string()
-        elif isim.endswith('.pptx'):
-            sunum = Presentation(dosya)
-            for slayt in sunum.slides:
-                for sekil in slayt.shapes:
-                    if hasattr(sekil, "text"): metin += sekil.text + "\n"
-        return f"\n[Yüklenen Belge İçeriği]:\n{metin}"
-    except Exception as e:
-        return f"\n[Dosya Okuma Hatası]: {str(e)}"
+            return df.head(20).to_string() # Sadece ilk 20 satır
+        return ""
+    except: return "Dosya hızlı okunamadı."
 
-# --- 3. WEB TARAMA ---
-def site_oku(url):
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        for s in soup(["script", "style"]): s.extract()
-        return soup.get_text()[:3000]
-    except: return ""
-
-# --- 4. API VE MODEL DOĞRULAMA (404 Kesin Çözüm) ---
+# --- 2. API YAPILANDIRMASI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı (GOOGLE_API_KEY) bulunamadı!")
+    st.error("API Key eksik!")
     st.stop()
 
-# 404 hatasını önlemek için doğrudan model ismini kullanıyoruz
-WORKING_MODEL = "gemini-1.5-flash"
+# --- 3. ARAYÜZ ---
+with st.sidebar:
+    st.title("🛡️ Eren AI")
+    if os.path.exists("Logo.png"): st.image("Logo.png", width=120)
+    modul = st.selectbox("Mod", ["Eren AI Asistanı", "Akademik", "Veli"])
 
-# --- 5. ANA EKRAN VE SOHBET ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Dosya Yükleme ve Giriş Alanı
-with st.container(border=True):
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        yukle = st.file_uploader("Dosya Seç", type=['png','jpg','jpeg','pdf','docx','xlsx','pptx'], label_visibility="collapsed")
-    with c2:
-        soru = st.chat_input("Eren AI'ya bir soru sorun...")
+# Giriş Bölümü
+c1, c2 = st.columns([1, 5])
+with c1:
+    yukle = st.file_uploader("Dosya", type=['png','jpg','pdf','docx','xlsx','pptx'], label_visibility="collapsed")
+with c2:
+    soru = st.chat_input("Hızlıca sorun...")
 
-# Sohbet Geçmişi
 for m in st.session_state.messages:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# --- 6. YANIT ÜRETİMİ ---
+# --- 4. HIZLI YANIT DÖNGÜSÜ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
         durum = st.empty()
+        durum.markdown("⚡ *İşleniyor...*")
         
-        # 1. Okul Bilgisi Gerekli mi? (Tetikleyici)
-        site_verisi = ""
-        okul_anahtar = ["okul", "eren", "müdür", "lise", "kolej", "personel"]
-        if any(kelime in soru.lower() for kelime in okul_anahtar):
-            durum.markdown("🔍 *Eren Koleji web sitesi inceleniyor...*")
-            site_verisi = site_oku("https://eren.k12.tr/")
+        site_bilgi = ""
+        if any(k in soru.lower() for k in ["okul", "eren", "müdür"]):
+            site_bilgi = site_oku_hizli("https://eren.k12.tr/")
         
-        # 2. Belge Bilgisi Gerekli mi?
-        belge_verisi = ""
+        dosya_bilgi = ""
         if yukle and not yukle.type.startswith("image/"):
-            durum.markdown("📄 *Yüklenen belge okunuyor...*")
-            belge_verisi = dosya_cozucu(yukle)
-        
-        if not site_verisi and not belge_verisi:
-            durum.markdown("🛡️ *Eren AI yanıt hazırlıyor...*")
+            dosya_bilgi = dosya_oku_hizli(yukle)
+
+        try:
+            # Model isminden 'models/' kısmını kesin olarak çıkardık (404 çözümü)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            
+            prompt_ozet = f"Sistem: {modul}. Veri: {site_bilgi} {dosya_bilgi}"
+            
+            girdi = [prompt_ozet, soru]
+            if yukle and yukle.type.startswith("image/"):
+                girdi.append(PIL.Image.open(yukle))
+
+            yanit = model.generate_content(girdi)
+            durum.markdown(yanit.text)
+            st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            
+        except Exception as e:
+            st.error(f"Hız Hatası: {e}")
