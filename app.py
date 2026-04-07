@@ -7,22 +7,24 @@ from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
 
-# --- 1. SAYFA YAPILANDIRMASI ---
+# --- 1. SİSTEM KİLİDİ (HATAYI BİTİREN KRİTİK ADIM) ---
+# Bu ayar, kütüphanenin v1beta hatası vermesini en baştan engeller.
+os.environ["GOOGLE_API_VERSION"] = "v1"
+
+# --- 2. SAYFA VE API YAPILANDIRMASI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# --- 2. API VE VERSİYON KİLİDİ (404 HATASI ÇÖZÜMÜ) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
     st.error("API Anahtarı bulunamadı! Lütfen Secrets ayarlarını kontrol edin.")
     st.stop()
 
-# KRİTİK DEĞİŞİKLİK: Modeli doğrudan 'v1' ana yolu üzerinden çağırıyoruz.
-# Bu tanımlama, image_4e3f2a'daki beta hatasını pas geçer.
-model_engine = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+# Modeli en kararlı ismiyle çağırıyoruz
+model_engine = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- 3. DÖKÜMAN OKUMA MOTORU ---
-def dosya_oku(dosya):
+def dosya_icerigini_getir(dosya):
     try:
         if dosya.type == "application/pdf":
             reader = PdfReader(dosya)
@@ -39,24 +41,24 @@ def dosya_oku(dosya):
             return df.to_string()
         return None
     except Exception as e:
-        return f"Hata: {str(e)}"
+        return f"Okuma Hatası: {str(e)}"
 
-# --- 4. ARAYÜZ ---
+# --- 4. ARAYÜZ TASARIMI ---
 st.title("🛡️ Eren AI Portalı")
 
 with st.sidebar:
-    st.title("🛡️ Eren AI")
-    mod = st.selectbox("Mod", ["Eren AI Asistanı", "Akademik Analiz"])
+    st.title("🛡️ Eren AI Menü")
+    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Analiz"])
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Paneli
+# Giriş Alanları
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        yukle = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
+        yukle = st.file_uploader("Belge", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
@@ -64,31 +66,32 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. YANIT ÜRETİMİ ---
+# --- 5. YANIT MOTORU VE DOSYA ENJEKSİYONU ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
-        alan.markdown("⚡ *Döküman analiz ediliyor...*")
+        cevap_alani = st.empty()
+        cevap_alani.markdown("⚡ *Döküman analiz ediliyor...*")
         
         try:
-            # Yapay zekaya dökümanı 'görebilmesi' için metin olarak ekliyoruz
-            prompt = [f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
+            # Yapay zekaya dökümanı 'görebilmesi' için metin olarak veriyoruz
+            prompt_listesi = [f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
             
             if yukle:
                 if yukle.type.startswith("image/"):
-                    prompt.append(PIL.Image.open(yukle))
+                    prompt_listesi.append(PIL.Image.open(yukle))
                 else:
-                    icerik = dosya_oku(yukle)
+                    icerik = dosya_icerigini_getir(yukle)
                     if icerik:
-                        prompt.append(f"\nBELGE İÇERİĞİ:\n{icerik}")
+                        # Asistanın 'göremiyorum' demesini bu satır engeller
+                        prompt_listesi.append(f"\nSİZE YÜKLENEN BELGE İÇERİĞİ:\n{icerik}")
 
-            yanit = model_engine.generate_content(prompt)
+            yanit = model_engine.generate_content(prompt_listesi)
             if yanit.text:
-                alan.markdown(yanit.text)
+                cevap_alani.markdown(yanit.text)
                 st.session_state.messages.append({"role": "assistant", "content": yanit.text})
         except Exception as e:
-            alan.error(f"Sistem Hatası: {str(e)}")
+            cevap_alani.error(f"Sistem Hatası: {str(e)}")
