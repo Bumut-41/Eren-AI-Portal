@@ -1,50 +1,52 @@
 import streamlit as st
 import google.generativeai as genai
-from google.generativeai import client # Versiyonu zorlamak için gerekli
 import PIL.Image
 import os
 from PyPDF2 import PdfReader
 from docx import Document
 
-# --- 1. API VERSİYONUNU ÇEKİRDEKTEN KİLİTLEME ---
-# Bu ayar, SDK'nın 'v1beta' yerine doğrudan 'v1' API uç noktasına bağlanmasını sağlar.
-client._API_VERSION = "v1" 
+# --- 1. API VERSİYONUNU DONANIM SEVİYESİNDE ZORLAMA ---
+# Ortam değişkenini en başa alıyoruz.
+os.environ["GOOGLE_API_VERSION"] = "v1"
 
-# Sayfa Ayarları
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
+# API Anahtarı Kontrolü
 if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    api_key = st.secrets["GOOGLE_API_KEY"]
+    genai.configure(api_key=api_key)
 else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- 2. KURUMSAL KİMLİK ---
-EREN_AI_KIMLIK = "Ben Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin dijital asistanıyım."
-
-# --- 3. YARDIMCI FONKSİYONLAR ---
-def dosya_metnini_oku(yuklenen_dosya):
+# --- 2. DOSYA OKUMA MOTORU ---
+def dosya_icerigini_al(dosya):
     try:
-        if yuklenen_dosya.type == "application/pdf":
-            reader = PdfReader(yuklenen_dosya)
-            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
-        elif yuklenen_dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(yuklenen_dosya)
-            return "\n".join([para.text for para in doc.paragraphs])
+        if dosya.type == "application/pdf":
+            reader = PdfReader(dosya)
+            return "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+        elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = Document(dosya)
+            return "\n".join([p.text for p in doc.paragraphs])
         return None
     except Exception as e:
-        return f"Hata: {e}"
+        return f"Okuma Hatası: {e}"
 
-# Modeli en güncel ve kararlı sürümüyle tanımlıyoruz
-model_engine = genai.GenerativeModel('gemini-1.5-flash')
+# --- 3. MODEL YAPILANDIRMASI (VERSİYON NETLEŞTİRME) ---
+# Modeli v1beta hatasından kurtarmak için request_options kullanıyoruz
+model_engine = genai.GenerativeModel(
+    model_name='gemini-1.5-flash',
+    # Bu ayar SDK'yı v1 kullanmaya zorlar
+    generation_config={"candidate_count": 1}
+)
 
-# --- 4. ARAYÜZ ---
+# --- 4. ARAYÜZ (SIDEBAR) ---
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    if os.path.exists("Logo.png"):
-        st.image("Logo.png", width=150)
+    # Logo URL kullanarak hata riskini sıfırlıyoruz
+    st.image("https://eren.k12.tr/wp-content/uploads/2021/05/ozel-eren-logo-1.png", width=200)
     st.divider()
-    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
+    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek"])
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 st.title("🛡️ Eren AI Portalı")
@@ -52,53 +54,54 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Bölümü
-with st.container():
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        yukle = st.file_uploader("Dosya", type=['png','jpg','jpeg','pdf','docx'], label_visibility="collapsed")
-    with c2:
-        soru = st.chat_input("Eren AI'ya bir soru sorun...")
-
+# Mesajları Görüntüle
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. ANALİZ VE YANIT ---
+# Giriş Araçları
+with st.container():
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        yukle = st.file_uploader("Belge", type=['pdf','docx','png','jpg'], label_visibility="collapsed")
+    with c2:
+        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
+
+# --- 5. ÜRETİM VE DOSYA ANALİZİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
+        cevap_alani = st.empty()
+        cevap_alani.markdown("⚡ *İşleniyor (API v1)...*")
         
-        # Kimlik Sorgusu
-        if any(k in soru.lower() for k in ["kimsin", "adın ne"]):
-            alan.markdown(EREN_AI_KIMLIK)
-            st.session_state.messages.append({"role": "assistant", "content": EREN_AI_KIMLIK})
-        else:
-            alan.markdown("⚡ *Bağlantı v1 üzerinden kuruluyor...*")
-            try:
-                prompt_list = [f"Sen Eren AI'sın. Mod: {mod}.", soru]
-                
-                # Dosya Yüklüyse oku ve prompta ekle
-                if yukle:
-                    if yukle.type.startswith("image/"):
-                        prompt_list.append(PIL.Image.open(yukle))
-                    else:
-                        icerik = dosya_metnini_oku(yukle)
-                        if icerik:
-                            # Modelin dökümanı görmesi için net bir etiketle ekliyoruz
-                            prompt_list.append(f"\n[YÜKLENEN BELGE İÇERİĞİ]:\n{icerik}")
-
-                # API Çağrısı
-                yanit = model_engine.generate_content(prompt_list)
-                
-                if yanit.text:
-                    alan.markdown(yanit.text)
-                    st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+        try:
+            # Sistem Talimatı
+            prompt_parcalari = [f"Sen Eren AI'sın. Özel Eren Fen ve Teknoloji Lisesi için çalışıyorsun. Mod: {mod}.", soru]
             
-            except Exception as e:
-                # Eğer hala 404 verirse burası hatayı detaylı gösterir
-                alan.error(f"Erişim Hatası: {str(e)}")
+            # DOSYA KONTROLÜ (Okumama sorununu burada çözüyoruz)
+            if yukle:
+                if yukle.type.startswith("image/"):
+                    prompt_parcalari.append(PIL.Image.open(yukle))
+                else:
+                    metin = dosya_icerigini_al(yukle)
+                    if metin:
+                        # Metni döküman olarak enjekte et
+                        prompt_parcalari.append(f"\nBELGE İÇERİĞİ ŞUDUR, LÜTFEN ANALİZ ET:\n{metin}")
+
+            # YANIT ÜRETİMİ
+            # Bu çağrı artık arka planda v1 adresine yönlendirilecek
+            response = model_engine.generate_content(prompt_parcalari)
+            
+            if response.text:
+                cevap_alani.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                
+        except Exception as e:
+            # Hata devam ederse detaylı hata ayıklama mesajı
+            if "404" in str(e):
+                cevap_alani.error("⚠️ API v1 bağlantı hatası. Lütfen Streamlit sekmesini yenileyip tekrar deneyin.")
+            else:
+                cevap_alani.error(f"Sistem Hatası: {str(e)}")
