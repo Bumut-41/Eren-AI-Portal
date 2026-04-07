@@ -4,56 +4,68 @@ import PIL.Image
 import os
 import requests
 from bs4 import BeautifulSoup
+import PyPDF2
+from docx import Document
+import pandas as pd
+from pptx import Presentation
+import io
 
-# --- 1. AYARLAR VE SOL MENÜ ---
+# --- 1. AYARLAR ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-with st.sidebar:
-    st.title("🛡️ Eren AI Menü")
-    if os.path.exists("Logo.png"):
-        st.image("Logo.png", width=150)
-    modul = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
-    st.divider()
-    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
-
-# --- 2. API VE GÜVENLİ MODEL SEÇİMİ (404 ÇÖZÜCÜ) ---
-if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-else:
-    st.error("Secrets kısmına GOOGLE_API_KEY ekleyin!")
-    st.stop()
-
-# Sistemin kabul edeceği doğru model ismini bulan fonksiyon
-@st.cache_resource
-def get_safe_model():
+# --- 2. DOSYA OKUMA FONKSİYONLARI (YENİ!) ---
+def dosya_icerigini_oku(yuklenen_dosya):
+    icerik_metni = ""
+    dosya_adi = yuklenen_dosya.name.lower()
+    
     try:
-        # Mevcut modelleri listele ve en uygun olanı seç
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        for m in models:
-            if "gemini-1.5-flash" in m: return m
-            if "gemini-pro" in m: return m
-        return "gemini-1.5-flash" # Varsayılan
-    except:
-        return "gemini-1.5-flash"
+        if dosya_adi.endswith('.pdf'):
+            pdf_reader = PyPDF2.PdfReader(yuklenen_dosya)
+            for page in pdf_reader.pages:
+                icerik_metni += page.extract_text() + "\n"
+        
+        elif dosya_adi.endswith('.docx'):
+            doc = Document(yuklenen_dosya)
+            icerik_metni = "\n".join([para.text for para in doc.paragraphs])
+            
+        elif dosya_adi.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(yuklenen_dosya)
+            icerik_metni = "Excel Tablo Verisi:\n" + df.to_string()
+            
+        elif dosya_adi.endswith('.pptx'):
+            prs = Presentation(yuklenen_dosya)
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        icerik_metni += shape.text + "\n"
+        
+        return f"\n--- Yüklenen Dosya ({dosya_adi}) İçeriği ---\n{icerik_metni}"
+    except Exception as e:
+        return f"\nDosya okunurken hata oluştu: {str(e)}"
 
-working_model_name = get_safe_model()
-
-# --- 3. CANLI WEB TARAMA FONKSİYONU ---
+# --- 3. WEB TARAMA FONKSİYONU ---
 def web_sitesini_oku(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for script in soup(["script", "style"]):
-            script.extract()
+        for script in soup(["script", "style"]): script.extract()
         metin = soup.get_text()
-        lines = (line.strip() for line in metin.splitlines())
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        return "\n".join(chunk for chunk in chunks if chunk)[:4000]
-    except Exception:
-        return ""
+        return "\n".join([l.strip() for l in metin.splitlines() if l.strip()])[:4000]
+    except: return ""
 
-# --- 4. ANA EKRAN ---
+# --- 4. API VE MODEL ---
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+else:
+    st.error("API Anahtarı eksik!")
+    st.stop()
+
+@st.cache_resource
+def get_model():
+    return "gemini-1.5-flash" # Veya senin çalışan model ismin
+
+# --- 5. ARAYÜZ ---
 st.title("🛡️ Eren AI Portalı")
 
 if "messages" not in st.session_state:
@@ -62,53 +74,43 @@ if "messages" not in st.session_state:
 with st.container(border=True):
     col1, col2 = st.columns([1, 4]) 
     with col1:
-        yuklenen_dosya = st.file_uploader("Upload", type=['png', 'jpg', 'jpeg', 'pdf'], label_visibility="collapsed")
+        yuklenen_dosya = st.file_uploader("Dosya", type=['png', 'jpg', 'pdf', 'docx', 'xlsx', 'pptx'], label_visibility="collapsed")
     with col2:
         prompt = st.chat_input("Eren AI'ya bir soru sorun...")
 
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]): st.markdown(m["content"])
 
-# --- 5. AKILLI CEVAP MOTORU ---
+# --- 6. İŞLEME ---
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+    with st.chat_message("user"): st.markdown(prompt)
 
     with st.chat_message("assistant"):
         placeholder = st.empty()
         
-        # Akıllı Tetikleyici
-        okul_terimleri = ["okul", "eren", "lise", "kolej", "müdür", "personel", "öğretmen", "kadro", "kimdir"]
+        # Web ve Dosya Bilgisi Toplama
         site_bilgisi = ""
-        
-        if any(kelime in prompt.lower() for kelime in okul_terimleri):
-            placeholder.markdown("🔍 *Web sitesinden güncel bilgiler doğrulanıyor...*")
+        if any(k in prompt.lower() for k in ["okul", "eren", "müdür"]):
+            placeholder.markdown("🔍 *Okul sitesine bakılıyor...*")
             site_bilgisi = web_sitesini_oku("https://eren.k12.tr/")
-        else:
-            placeholder.markdown("🛡️ *Eren AI yanıt hazırlıyor...*")
+        
+        dosya_verisi = ""
+        if yuklenen_dosya:
+            placeholder.markdown("📄 *Dosya içeriği analiz ediliyor...*")
+            if not yuklenen_dosya.type.startswith("image/"):
+                dosya_verisi = dosya_icerigini_oku(yuklenen_dosya)
 
         try:
-            # Doğrulanmış modeli başlat
-            model = genai.GenerativeModel(working_model_name)
+            model = genai.GenerativeModel(get_model())
+            sistem_talimati = f"Sen Eren AI'sın. SİTE: {site_bilgisi} DOSYA: {dosya_verisi}"
             
-            sistem_mesaji = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. 
-            WEB VERİSİ: {site_bilgisi if site_bilgisi else "Genel bilgi."}
-            
-            ÖNEMLİ: Okul kadrosu sorulursa web verisindeki isimleri kullan. 
-            Cevapların kısa ve kurumsal olsun. Mod: {modul}
-            """
-
-            icerik = [sistem_mesaji, prompt]
+            icerik = [sistem_talimati, prompt]
             if yuklenen_dosya and yuklenen_dosya.type.startswith("image/"):
                 icerik.append(PIL.Image.open(yuklenen_dosya))
 
             response = model.generate_content(icerik)
             placeholder.markdown(response.text)
             st.session_state.messages.append({"role": "assistant", "content": response.text})
-            
         except Exception as e:
-            st.error(f"Sistem Hatası: {str(e)}")
-            st.info(f"Denenen Model: {working_model_name}")
+            st.error(f"Hata: {e}")
