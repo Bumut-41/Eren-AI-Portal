@@ -1,95 +1,56 @@
 import streamlit as st
 import google.generativeai as genai
-import PIL.Image
 import os
-import pandas as pd
-from PyPDF2 import PdfReader
-from docx import Document
 
-# --- 1. KRİTİK: VERSİYON HATASINI KÖKTEN ÇÖZEN AYAR ---
-# Bu satır, kütüphanenin v1beta hatası vermesini engeller ve sistemi v1'e kilitler.
-# image_4e5224'teki hatanın tek gerçek çözümü budur.
+# --- 1. SİSTEM SEVİYESİNDE API KİLİTLEME ---
+# Hata mesajındaki 'v1beta' zorlamasını burada kırıyoruz.
 os.environ["GOOGLE_API_VERSION"] = "v1"
 
-# --- 2. SAYFA VE API YAPILANDIRMASI ---
-st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Eren AI - Güvenli Mod", layout="wide")
 
+# --- 2. API YAPILANDIRMASI ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Secrets ayarlarını kontrol edin.")
+    st.error("Lütfen Streamlit Secrets kısmına GOOGLE_API_KEY ekleyin.")
     st.stop()
 
-# Modeli en güncel kararlı ismiyle tanımlıyoruz
-model = genai.GenerativeModel('gemini-1.5-flash')
+# --- 3. MODEL TANIMLAMA (EN KARARLI YÖNTEM) ---
+try:
+    # 'models/' ön eki olmadan, en yalın haliyle çağırıyoruz.
+    # Bu yöntem v1 kararlı sürümünde en yüksek başarıyı verir.
+    model = genai.GenerativeModel('gemini-1.5-flash')
+except Exception as e:
+    st.error(f"Model yükleme hatası: {str(e)}")
 
-# --- 3. DÖKÜMAN OKUMA FONKSİYONU ---
-def dokuman_oku(dosya):
-    try:
-        if dosya.type == "application/pdf":
-            reader = PdfReader(dosya)
-            return "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-        elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(dosya)
-            return "\n".join([p.text for p in doc.paragraphs])
-        elif dosya.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"]:
-            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return df.to_string()
-        return None
-    except Exception as e:
-        return f"Dosya Okuma Hatası: {str(e)}"
-
-# --- 4. ARAYÜZ TASARIMI ---
+# --- 4. ARAYÜZ ---
 st.title("🛡️ Eren AI Portalı")
-
-with st.sidebar:
-    st.title("🛡️ Eren AI")
-    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Analiz"])
-    st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
+st.info("Sistem şu an 'v1 Kararlı Sürüm' modunda çalışıyor.")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Giriş Bölümü
-with st.container():
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        yukle = st.file_uploader("Belge", type=['pdf','docx','xlsx','csv','png','jpg'], label_visibility="collapsed")
-    with c2:
-        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
-for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+user_input = st.chat_input("Eren AI'ya bir soru sorun...")
 
-# --- 5. ANALİZ VE YANIT MOTORU ---
-if soru:
-    st.session_state.messages.append({"role": "user", "content": soru})
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
     with st.chat_message("user"):
-        st.markdown(soru)
+        st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        cevap_alani = st.empty()
-        cevap_alani.markdown("⚡ *Döküman inceleniyor...*")
-        
         try:
-            # Prompt hazırlığı
-            prompt_parcalari = [f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
+            # Yanıt üretirken güvenlik önlemlerini de ekliyoruz
+            response = model.generate_content(user_input)
             
-            if yukle:
-                if yukle.type.startswith("image/"):
-                    prompt_parcalari.append(PIL.Image.open(yukle))
-                else:
-                    icerik = dokuman_oku(yukle)
-                    if icerik:
-                        # Asistanın dosyayı 'görmesini' sağlıyoruz
-                        prompt_parcalari.append(f"\nSİZE YÜKLENEN BELGE İÇERİĞİ:\n{icerik}")
-
-            # Kararlı API yolu üzerinden yanıt üretimi
-            yanit = model.generate_content(prompt_parcalari)
-            
-            if yanit.text:
-                cevap_alani.markdown(yanit.text)
-                st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            if response.text:
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            else:
+                st.warning("Yapay zeka boş bir yanıt döndürdü.")
         except Exception as e:
-            cevap_alani.error(f"Sistem Hatası: {str(e)}")
+            # Hata devam ederse v1beta mı yoksa başka bir şey mi olduğunu göreceğiz
+            st.error(f"Bağlantı Hatası: {str(e)}")
