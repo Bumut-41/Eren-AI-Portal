@@ -8,6 +8,7 @@ from docx import Document
 
 # --- 1. KRİTİK: VERSİYON HATASINI KÖKTEN ÇÖZEN AYAR ---
 # Bu satır, kütüphanenin v1beta hatası vermesini engeller ve sistemi v1'e kilitler.
+# image_4e5224'teki hatanın tek gerçek çözümü budur.
 os.environ["GOOGLE_API_VERSION"] = "v1"
 
 # --- 2. SAYFA VE API YAPILANDIRMASI ---
@@ -16,7 +17,7 @@ st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="w
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Lütfen Secrets ayarlarını kontrol edin.")
+    st.error("API Anahtarı bulunamadı! Secrets ayarlarını kontrol edin.")
     st.stop()
 
 # Modeli en güncel kararlı ismiyle tanımlıyoruz
@@ -72,7 +73,7 @@ if soru:
         cevap_alani.markdown("⚡ *Döküman inceleniyor...*")
         
         try:
-            # Asistanın dosyayı "görememe" sorununu (image_43697a) metin enjeksiyonu ile çözüyoruz
+            # Prompt hazırlığı
             prompt_parcalari = [f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
             
             if yukle:
@@ -81,7 +82,7 @@ if soru:
                 else:
                     icerik = dokuman_oku(yukle)
                     if icerik:
-                        # Bu enjeksiyon asistanın dosyayı görmesini sağlar
+                        # Asistanın dosyayı 'görmesini' sağlıyoruz
                         prompt_parcalari.append(f"\nSİZE YÜKLENEN BELGE İÇERİĞİ:\n{icerik}")
 
             # Kararlı API yolu üzerinden yanıt üretimi
