@@ -5,16 +5,10 @@ import os
 from PyPDF2 import PdfReader
 from docx import Document
 
-# --- 1. SAYFA AYARLARI ---
+# --- 1. SAYFA AYARLARI VE KURUMSAL KİMLİK ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-else:
-    st.error("API Anahtarı bulunamadı!")
-    st.stop()
-
-# --- 2. ÖZEL KURUMSAL TANITIM METNİ ---
+# Kurumsal Tanıtım Metni
 EREN_AI_KIMLIK = """
 Merhaba! Ben **Eren AI**, Özel Eren Fen ve Teknoloji Lisesi için özel olarak geliştirilmiş yapay zeka asistanıyım. 
 
@@ -24,39 +18,49 @@ Derslerinizde karşılaştığınız zorlukları aşmanıza yardımcı olmak, pr
 Özel Eren Fen ve Teknoloji Lisesi'nin kurumsal değerlerini temsil ederek; profesyonel, yardımcı ve çözüm odaklı bir yaklaşımla her türlü sorunuzda yanınızdayım.
 """
 
-# --- 3. YARDIMCI FONKSİYONLAR ---
-def dosya_metnini_oku(yuklenen_dosya):
-    try:
-        if yuklenen_dosya.type == "application/pdf":
-            reader = PdfReader(yuklenen_dosya)
-            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
-        elif yuklenen_dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(yuklenen_dosya)
-            return "\n".join([para.text for para in doc.paragraphs])
-        return None
-    except Exception as e:
-        return f"Dosya okunurken hata oluştu: {e}"
+# --- 2. API VE MODEL YAPILANDIRMASI (404 ÇÖZÜMÜ) ---
+if "GOOGLE_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+else:
+    st.error("API Anahtarı bulunamadı! Lütfen Streamlit Secrets kısmını kontrol edin.")
+    st.stop()
 
 @st.cache_resource
-def model_getir():
+def model_hazirla():
+    # 404 hatalarını önlemek için dinamik model seçimi
     try:
-        mevcut_modeller = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        for tercih in ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro']:
-            if tercih in mevcut_modeller:
-                return genai.GenerativeModel(tercih)
-        return genai.GenerativeModel(mevcut_modeller[0])
+        modeller = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        tercihler = ['models/gemini-1.5-flash', 'gemini-1.5-flash', 'models/gemini-pro']
+        for t in tercihler:
+            if t in modeller:
+                return genai.GenerativeModel(t)
+        return genai.GenerativeModel(modeller[0])
     except:
         return genai.GenerativeModel('gemini-1.5-flash')
 
-model_engine = model_getir()
+model_engine = model_hazirla()
 
-# --- 4. ARAYÜZ (SIDEBAR) ---
+# --- 3. DOSYA OKUMA FONKSİYONLARI (PDF OKUYAMAMA ÇÖZÜMÜ) ---
+def metin_ayikla(dosya):
+    try:
+        if dosya.type == "application/pdf":
+            okuyucu = PdfReader(dosya)
+            return "\n".join([sayfa.extract_text() for sayfa in okuyucu.pages if sayfa.extract_text()])
+        elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = Document(dosya)
+            return "\n".join([p.text for p in doc.paragraphs])
+        return None
+    except Exception as e:
+        return f"Hata: {e}"
+
+# --- 4. ARAYÜZ TASARIMI ---
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
     if os.path.exists("Logo.png"):
         st.image("Logo.png", width=150)
     st.divider()
     mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Destek", "Veli Bilgilendirme"])
+    st.divider()
     st.caption("© 2026 Özel Eren Fen ve Teknoloji Lisesi")
 
 st.title("🛡️ Eren AI Portalı")
@@ -64,58 +68,59 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Dosya Yükleme ve Giriş Alanı
 with st.container():
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        yukle = st.file_uploader("Dosya", type=['png','jpg','jpeg','pdf','docx'], label_visibility="collapsed")
-    with c2:
-        soru = st.chat_input("Eren AI'ya bir soru sorun...")
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        yuklenen_dosya = st.file_uploader("Dosya Seç", type=['png','jpg','jpeg','pdf','docx'], label_visibility="collapsed")
+    with col2:
+        kullanici_sorusu = st.chat_input("Eren AI'ya bir soru sorun...")
 
+# Sohbet Geçmişini Göster
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. AKILLI YANIT MOTORU ---
-if soru:
-    st.session_state.messages.append({"role": "user", "content": soru})
+# --- 5. YANIT ÜRETİM MANTIĞI (AKILLI ODAKLANMA) ---
+if kullanici_sorusu:
+    st.session_state.messages.append({"role": "user", "content": kullanici_sorusu})
     with st.chat_message("user"):
-        st.markdown(soru)
+        st.markdown(kullanici_sorusu)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
+        cevap_alani = st.empty()
         
-        # KİMLİK SORGUSU KONTROLÜ
-        kimlik_sorulari = ["sen kimsin", "adın ne", "necisin", "kimsin sen", "kendini tanıt"]
-        if any(kelime in soru.lower() for kelime in kimlik_sorulari):
-            alan.markdown(EREN_AI_KIMLIK)
+        # 1. Kimlik Kontrolü
+        if any(k in kullanici_sorusu.lower() for k in ["kimsin", "adın ne", "necisin"]):
+            cevap_alani.markdown(EREN_AI_KIMLIK)
             st.session_state.messages.append({"role": "assistant", "content": EREN_AI_KIMLIK})
+        
         else:
-            alan.markdown("⚡ *Bağlantı kuruluyor...*")
+            cevap_alani.markdown("⚡ *İşleniyor...*")
             try:
-                # Arka plan talimatı
-                talimat = (
-                    "Sen Özel Eren Fen ve Teknoloji Lisesi'nin yapay zeka asistanı Eren AI'sın. "
-                    f"Şu an '{mod}' modundasın. Daima profesyonel, nazik ve akademik bir dil kullan."
-                )
-                prompt = [talimat, soru]
+                # Arka Plan Komutu
+                talimat = f"Sen Özel Eren Fen ve Teknoloji Lisesi resmi asistanı Eren AI'sın. Mod: {mod}."
+                prompt_parcalari = [talimat, kullanici_sorusu]
                 
-                # Akıllı Odaklanma Kontrolü
-                dosya_kelimeleri = ["dosya", "belge", "doküman", "pdf", "word", "içerik", "yüklediğim"]
-                dosyadan_bahsediyor = any(k in soru.lower() for k in dosya_kelimeleri)
+                # 2. Akıllı Dosya Odaklanma
+                # Sadece soruda dosya/belge kelimesi geçiyorsa içeriği modele ekle
+                dosya_kelimeleri = ["dosya", "belge", "pdf", "içerik", "yüklediğim", "oku", "özet"]
+                dosyaya_baksin_mi = any(k in kullanici_sorusu.lower() for k in dosya_kelimeleri)
 
-                if yukle:
-                    if yukle.type.startswith("image/"):
-                        prompt.append(PIL.Image.open(yukle))
-                    elif dosyadan_bahsediyor:
-                        metin = dosya_metnini_oku(yukle)
-                        if metin:
-                            prompt.append(f"\n--- YÜKLENEN BELGE ---\n{metin}")
+                if yuklenen_dosya:
+                    if yuklenen_dosya.type.startswith("image/"):
+                        prompt_parcalari.append(PIL.Image.open(yuklenen_dosya))
+                    elif dosyaya_baksin_mi:
+                        icerik = metin_ayikla(yuklenen_dosya)
+                        if icerik:
+                            prompt_parcalari.append(f"\n--- BELGE İÇERİĞİ ---\n{icerik}")
 
-                yanit = model_engine.generate_content(prompt)
+                # Modelden Yanıt Al
+                response = model_engine.generate_content(prompt_parcalari)
                 
-                if yanit.text:
-                    alan.markdown(yanit.text)
-                    st.session_state.messages.append({"role": "assistant", "content": yanit.text})
-                
+                if response.text:
+                    cevap_alani.markdown(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+            
             except Exception as e:
-                alan.error(f"Sistem Hatası: {str(e)}")
+                cevap_alani.error(f"Sistem Hatası: {str(e)}")
