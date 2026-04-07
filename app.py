@@ -7,58 +7,63 @@ from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
 
-# --- 1. KURUMSAL KİMLİK VE AYARLAR ---
+# --- 1. KURUMSAL KİMLİK VE SAYFA AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 EREN_AI_KIMLIK = """
 Merhaba! Ben **Eren AI**, Özel Eren Fen ve Teknoloji Lisesi için geliştirilmiş resmi yapay zeka asistanıyım. 
-Akademik dökümanlarınızı (PDF, Word, Excel, PowerPoint) analiz edebilir ve sorularınızı yanıtlayabilirim.
+
+Okulumuzun vizyonu doğrultusunda; PDF, Word, Excel ve PowerPoint dökümanlarınızı analiz edebilir, sorularınızı yanıtlayabilir ve akademik çalışmalarınızda size destek olabilirim.
 """
 
-# --- 2. API VE MODEL YAPILANDIRMASI (404 ÇÖZÜMÜ) ---
+# --- 2. API VE MODEL YAPILANDIRMASI (404 HATASI KESİN ÇÖZÜM) ---
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Secrets ayarlarını kontrol edin.")
+    st.error("API Anahtarı bulunamadı! Lütfen Streamlit Secrets ayarlarını kontrol edin.")
     st.stop()
 
 @st.cache_resource
 def model_yukle():
+    # 404 hatasını önlemek için doğrudan kararlı modele bağlanır
     try:
-        # En kararlı sürümü kullanarak 404 hatasını engeller
         return genai.GenerativeModel('gemini-1.5-flash')
     except:
         return genai.GenerativeModel('gemini-pro')
 
 model_engine = model_yukle()
 
-# --- 3. GELİŞMİŞ DOSYA OKUMA MOTORU ---
-def dosya_icerigini_getir(dosya):
+# --- 3. GELİŞMİŞ BELGE OKUMA MOTORU (WEB UYUMLU) ---
+def dosya_icerigini_ayikla(dosya):
     try:
+        # PDF OKUMA
         if dosya.type == "application/pdf":
             reader = PdfReader(dosya)
             return "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
         
+        # WORD OKUMA
         elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
             doc = Document(dosya)
             return "\n".join([p.text for p in doc.paragraphs])
         
+        # POWERPOINT OKUMA
         elif dosya.type == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
             prs = Presentation(dosya)
-            metin = []
+            metin_kutulari = []
             for slide in prs.slides:
                 for shape in slide.shapes:
                     if hasattr(shape, "text"):
-                        metin.append(shape.text)
-            return "\n".join(metin)
+                        metin_kutulari.append(shape.text)
+            return "\n".join(metin_kutulari)
         
+        # EXCEL VEYA CSV OKUMA
         elif dosya.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"]:
             df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return df.to_string()
+            return f"Tablo Verisi:\n{df.to_string()}"
             
         return None
     except Exception as e:
-        return f"Okuma Hatası: {str(e)}"
+        return f"Dosya Okuma Hatası: {str(e)}"
 
 # --- 4. ARAYÜZ TASARIMI ---
 with st.sidebar:
@@ -78,44 +83,46 @@ if "messages" not in st.session_state:
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        yukle = st.file_uploader("Belge", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
+        yukle = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
+        soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
+# Sohbet Geçmişi
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# --- 5. AKILLI YANIT VE ANALİZ ---
+# --- 5. YANIT MOTORU ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
+        cevap_alani = st.empty()
         
+        # Kimlik Sorgusu
         if any(k in soru.lower() for k in ["kimsin", "adın ne"]):
-            alan.markdown(EREN_AI_KIMLIK)
+            cevap_alani.markdown(EREN_AI_KIMLIK)
             st.session_state.messages.append({"role": "assistant", "content": EREN_AI_KIMLIK})
         else:
-            alan.markdown("⚡ *Döküman analiz ediliyor...*")
+            cevap_alani.markdown("⚡ *Döküman analiz ediliyor...*")
             try:
-                baglam = f"Sen Özel Eren Fen ve Teknoloji Lisesi uzman asistanısın. Mod: {mod}."
-                prompt_list = [baglam, soru]
+                talimat = f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanı Eren AI'sın. Mod: {mod}."
+                prompt_parcalari = [talimat, soru]
                 
-                # Dosya içeriğini modele enjekte et
+                # Dosya içeriğini asistanın görebileceği şekilde ekle
                 if yukle:
                     if yukle.type.startswith("image/"):
-                        prompt_list.append(PIL.Image.open(yukle))
+                        prompt_parcalari.append(PIL.Image.open(yukle))
                     else:
-                        icerik = dosya_icerigini_getir(yukle)
-                        if icerik:
-                            prompt_list.append(f"\n--- ANALİZ EDİLEN DOSYA İÇERİĞİ ---\n{icerik}")
+                        metin = dosya_icerigini_ayikla(yukle)
+                        if metin:
+                            prompt_parcalari.append(f"\n--- DOSYA İÇERİĞİ ---\n{metin}")
 
-                yanit = model_engine.generate_content(prompt_list)
+                yanit = model_engine.generate_content(prompt_parcalari)
                 if yanit.text:
-                    alan.markdown(yanit.text)
+                    cevap_alani.markdown(yanit.text)
                     st.session_state.messages.append({"role": "assistant", "content": yanit.text})
             except Exception as e:
-                alan.error(f"Sistem Hatası: {str(e)}")
+                cevap_alani.error(f"Sistem Hatası: {str(e)}")
