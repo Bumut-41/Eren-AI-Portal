@@ -15,26 +15,23 @@ st.set_page_config(page_title="Eren AI | Akademik Portalı", page_icon="🛡️"
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı eksik! Lütfen Streamlit ayarlarını kontrol edin.")
+    st.error("API Anahtarı eksik! Lütfen Streamlit Cloud ayarlarını kontrol edin.")
     st.stop()
 
-# --- MODEL (Gemini 3 Flash) ---
+# --- MODEL ---
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
 # --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ DERİN BİLGİ TABANI ---
-# Bu bilgiler okulun kurumsal yapısını derinlemesine temsil eder.
 OKUL_BILGILERI = """
 Kurum: Özel Eren Fen ve Teknoloji Lisesi
 Web Sitesi: https://eren.k12.tr/
 
 Akademik Misyon: 
-Özel Eren Fen ve Teknoloji Lisesi, öğrencilerini sadece bilgi tüketen değil, teknoloji üreten liderler olarak yetiştirir. 
-Eren AI, bu ekosistemin bir parçası olarak öğretmenlerin materyal hazırlığını hızlandırmak ve öğrencilerin akademik araştırmalarına rehberlik etmek için tasarlanmıştır.
+Öğrencileri sadece bilgi tüketen değil, teknoloji üreten liderler olarak yetiştirir. 
+Eren AI, bu ekosistemin bir parçası olarak akademik dürüstlük ve teknolojik inovasyon odaklı hizmet verir.
 
-Kurumsal Bilgiler:
-- Eğitim Odağı: İleri düzey Fen Bilimleri, Robotik, Yazılım ve İnovasyon.
-- Vizyon: Bilim ve teknolojide öncü, akademik dürüstlüğe sahip, dünya ile rekabet edebilecek bireyler yetiştirmek.
-- Projeler: TÜBİTAK, Teknofest ve uluslararası bilim olimpiyatları temel önceliktir.
+Eğitim Odağı: İleri düzey Fen Bilimleri, Robotik, Yazılım ve İnovasyon projeleri (TÜBİTAK, Teknofest).
+Vizyon: Atatürk ilke ve inkılaplarına bağlı, dünya ile rekabet edebilecek bilim insanları yetiştirmek.
 """
 
 # --- DOSYA İŞLEME FONKSİYONLARI ---
@@ -52,17 +49,27 @@ def metin_ayikla(dosya):
     except Exception as e:
         return f"Dosya Okuma Hatası: {e}"
 
-# --- ARAYÜZ ---
+# --- SOL MENÜ (SIDEBAR) TASARIMI ---
 with st.sidebar:
-    st.image("https://eren.k12.tr/wp-content/uploads/2021/05/eren-logo.png", width=150)
+    # GitHub deposundaki Logo.png dosyasını çağırıyoruz
+    try:
+        logo = Image.open("Logo.png")
+        st.image(logo, use_container_width=True)
+    except:
+        st.error("Logo.png bulunamadı.")
+    
     st.title("🛡️ Eren AI")
     st.markdown("### **Akademik Destek Sistemi**")
     st.info("Bu platform Özel Eren Fen ve Teknoloji Lisesi paydaşları için özel olarak geliştirilmiştir.")
+    
     st.divider()
-    mod = st.selectbox("Asistan Modu", ["Döküman Analizi", "Genel Akademik Asistan", "Sınav Hazırlık Modu"])
+    # Talep üzerine asistan modu açılır kutusu kaldırıldı
+    st.write("📌 **Durum:** Aktif")
+    st.write("🎓 **Odak:** Akademik Analiz")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
+# --- SOHBET GEÇMİŞİ ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -70,11 +77,11 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş Paneli
+# --- GİRİŞ ALANI ---
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        dosya = st.file_uploader("Dosya Yükle", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_final_v10", label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya Yükle", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v11", label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya akademik sorunuzu iletin...")
 
@@ -85,21 +92,23 @@ if soru:
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI akademik verileri derinlemesine inceliyor...")
+        durum = st.status("🛡️ Eren AI kurumsal verileri ve belgeleri inceliyor...")
         
         try:
-            # SİSTEM TALİMATI (Kurumsal Kimlik)
+            # SİSTEM TALİMATI
             system_instruction = f"""
             Sen Eren AI'sın. Özel Eren Fen ve Teknoloji Lisesi'nin resmi akademik asistanısın.
-            Görevin: Öğretmenleri akademik materyal üretiminde, öğrencileri ise öğrenme süreçlerinde asiste etmektir.
             Okul Bilgileri: {OKUL_BILGILERI}
             
-            Önemli: Okul idaresi veya yapısı hakkında soru sorulduğunda, yukarıdaki bilgileri ve eren.k12.tr sitesini referans alarak kurumsal bir dille cevap ver. 
-            Bilmediğin okul içi bilgiler için kullanıcıyı 'Hakkımızda' veya 'İletişim' sayfasına yönlendir.
-            Dilin akademik, nazik ve çözüm odaklı olmalı.
+            Görevin:
+            1. Öğrencilere ve öğretmenlere akademik konularda asistanlık yapmak.
+            2. Okul hakkında soru sorulduğunda eren.k12.tr sitesini ve yukarıdaki bilgileri baz alarak resmi bir dille cevap vermek.
+            3. Yüklenen belgeleri analiz ederek özetlemek veya soruları yanıtlamak.
+            
+            Üslubun profesyonel, vizyoner ve her zaman Özel Eren Fen ve Teknoloji Lisesi'nin prestijine uygun olmalı.
             """
             
-            prompt_parts = [system_instruction, f"Aktif Mod: {mod}", soru]
+            prompt_parts = [system_instruction, soru]
             
             if dosya:
                 if dosya.type.startswith("image/"):
@@ -108,22 +117,22 @@ if soru:
                     reader = PdfReader(dosya)
                     pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
                     if len(pdf_metni.strip()) > 50:
-                        prompt_parts.append(f"Analiz Edilecek PDF:\n{pdf_metni}")
+                        prompt_parts.append(f"Belge Metni:\n{pdf_metni}")
                     else:
                         dosya.seek(0)
                         sayfalar = pdf2image.convert_from_bytes(dosya.read())
-                        prompt_parts.extend(sayfalar[:5]) # İlk 5 sayfayı görsel olarak ekle
+                        prompt_parts.extend(sayfalar[:3])
                 else:
                     ek_metin = metin_ayikla(dosya)
-                    if ek_metin: prompt_parts.append(f"Ek Belge İçeriği:\n{ek_metin}")
+                    if ek_metin: prompt_parts.append(f"Belge İçeriği:\n{ek_metin}")
 
             response = model.generate_content(prompt_parts)
             
             if response:
-                durum.update(label="✅ İşlem Tamamlandı", state="complete")
+                durum.update(label="✅ Analiz Tamamlandı", state="complete")
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
         except Exception as e:
-            durum.update(label="❌ Bağlantı Hatası", state="error")
-            st.error(f"Sistem hatası: {str(e)}")
+            durum.update(label="❌ Bağlantı Kesildi", state="error")
+            st.error(f"Bir hata oluştu: {str(e)}")
