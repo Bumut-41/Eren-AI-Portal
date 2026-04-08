@@ -5,7 +5,6 @@ import pandas as pd
 from docx import Document
 from pptx import Presentation
 from PIL import Image
-import io
 
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
@@ -14,46 +13,29 @@ st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="w
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Lütfen Secrets kısmını kontrol edin.")
+    st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- GELİŞMİŞ DOSYA OKUMA MOTORU ---
-def dosya_metne_donustur(dosya):
+# --- GELİŞMİŞ DOSYA OKUMA MOTORU (Hata Kontrollü) ---
+def metin_ayikla(dosya):
     try:
-        # PDF Okuma
         if dosya.type == "application/pdf":
             reader = PdfReader(dosya)
-            text = ""
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted: text += extracted + "\n"
-            return text
-        
-        # Word Okuma
+            return "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
         elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(dosya)
-            return "\n".join([p.text for p in doc.paragraphs])
-        
-        # PowerPoint Okuma
+            return "\n".join([p.text for p in Document(dosya).paragraphs])
+        elif "spreadsheet" in dosya.type or "csv" in dosya.type:
+            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
+            return f"Tablo Verileri:\n{df.to_string()}"
         elif "presentationml" in dosya.type:
             pptx = Presentation(dosya)
-            text = ""
-            for slide in pptx.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"): text += shape.text + "\n"
-            return text
-        
-        # Excel veya CSV Okuma
-        elif "spreadsheetml" in dosya.type or "csv" in dosya.type:
-            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return f"Tablo Verileri (İlk 50 Satır):\n{df.head(50).to_string()}"
-            
+            return "\n".join([s.text for sl in pptx.slides for s in sl.shapes if hasattr(s, "text")])
         return None
     except Exception as e:
-        return f"Hata: {str(e)}"
+        return f"OKUMA HATASI: {str(e)}"
 
-# --- MODEL YAPILANDIRMASI ---
-# Listenizde mevcut olan Gemini 3 sürümünü kullanıyoruz
+# --- MODEL ---
+# Gemini 3 Preview - En gelişmiş döküman anlama kapasitesine sahip model
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
 # --- ARAYÜZ ---
@@ -61,12 +43,11 @@ with st.sidebar:
     st.title("🛡️ Eren AI")
     st.markdown("### Özel Eren Fen ve Teknoloji Lisesi")
     st.divider()
-    mod = st.selectbox("Asistan Modu", ["Genel Asistan", "Akademik Analiz", "Veli Rehberi"])
+    mod = st.selectbox("Asistan Modu", ["Genel Asistan", "Döküman Analizi"])
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Geçmiş mesajları göster
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
@@ -75,11 +56,11 @@ for m in st.session_state.messages:
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        yuklenen_dosya = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg','jpeg'], label_visibility="collapsed")
+        belge = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg','jpeg'], label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
-# --- ANA İŞLEMCİ ---
+# --- İŞLEME ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
@@ -87,31 +68,38 @@ if soru:
 
     with st.chat_message("assistant"):
         cevap_alani = st.empty()
-        cevap_alani.info("🛡️ Eren AI dökümanı okuyor...")
+        cevap_alani.info("🛡️ Eren AI dosyayı ve soruyu analiz ediyor...")
         
         try:
-            # Temel talimat ve soru
-            prompt_list = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel bir okul asistanısın.", soru]
-            
-            # Dosya varsa içeriği ayıkla ve soruya ekle
-            if yuklenen_dosya:
-                if yuklenen_dosya.type.startswith("image/"):
-                    prompt_list.append(Image.open(yuklenen_dosya))
-                else:
-                    icerik = dosya_metne_donustur(yuklenen_dosya)
-                    if icerik:
-                        # DOSYAYI SORUNUN BAŞINA EKLEYEREK MODELİN GÖRMESİNİ SAĞLIYORUZ
-                        belge_notu = f"\n\n--- KULLANICININ YÜKLEDİĞİ DOSYA İÇERİĞİ ---\n{icerik}\n----------------------------------\n"
-                        prompt_list[1] = belge_notu + soru # Soruyu belge içeriğiyle birleştir
+            # 1. DOSYA İÇERİĞİNİ HAZIRLA
+            belge_icerigi = ""
+            gorsel_mi = False
+            gorsel_data = None
 
-            # Yanıtı al
-            response = model.generate_content(prompt_list)
+            if belge:
+                if belge.type.startswith("image/"):
+                    gorsel_mi = True
+                    gorsel_data = Image.open(belge)
+                else:
+                    ayiklanan_metin = metin_ayikla(belge)
+                    if ayiklanan_metin:
+                        belge_icerigi = f"\n\n--- DOSYA İÇERİĞİ ---\n{ayiklanan_metin}\n--- DOSYA SONU ---\n"
+
+            # 2. PROMPT OLUŞTUR
+            # Talimat + Dosya İçeriği + Soru
+            tam_prompt = [f"Sen Eren AI'sın. Profesyonel bir lise asistanısın. {belge_icerigi}", soru]
+            
+            if gorsel_mi:
+                tam_prompt.append(gorsel_data)
+
+            # 3. YANIT ÜRET
+            response = model.generate_content(tam_prompt)
             
             if response.text:
                 cevap_alani.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
             else:
-                cevap_alani.warning("Dosya okundu ancak anlamlı bir metin bulunamadı.")
+                cevap_alani.error("Yanıt üretilemedi.")
                 
         except Exception as e:
-            cevap_alani.error(f"Sistem Hatası: {str(e)}")
+            cevap_alani.error(f"Hata: {str(e)}")
