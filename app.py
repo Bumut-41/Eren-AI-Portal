@@ -11,28 +11,16 @@ import io
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# API Anahtarı Kontrolü
+# API Yapılandırması
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Lütfen Streamlit Secrets kısmını kontrol edin.")
+    st.error("API Anahtarı eksik!")
     st.stop()
 
-# --- DİNAMİK MODEL BAĞLANTISI ---
-# Hangi versiyonun açık olduğunu otomatik bulur
-@st.cache_resource
-def get_working_model():
-    model_list = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro']
-    for m_name in model_list:
-        try:
-            m = genai.GenerativeModel(m_name)
-            # Test amaçlı küçük bir çağrı (Hata verirse bir sonrakine geçer)
-            return m
-        except:
-            continue
-    return genai.GenerativeModel('gemini-1.5-flash') # Varsayılan
-
-model = get_working_model()
+# --- MODEL TANIMLAMA (Gemini 3 Flash) ---
+# En güncel ve sorunsuz versiyon
+model = genai.GenerativeModel('gemini-3-flash-preview')
 
 # --- DOSYA İŞLEME FONKSİYONLARI ---
 def metin_ayikla(dosya):
@@ -63,11 +51,11 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş Bölümü
+# Giriş Paneli
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="final_v_2026", label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v3_flash", label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
@@ -78,32 +66,35 @@ if soru:
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI dökümanı analiz ediyor...")
+        durum = st.status("🛡️ Eren AI analiz ediyor...")
         try:
-            prompt_list = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel okul asistanısın.", soru]
+            # Gemini 3 Flash için içerik listesi
+            icerik_listesi = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel okul asistanısın.", soru]
             
             if dosya:
                 if dosya.type.startswith("image/"):
-                    prompt_list.append(Image.open(dosya))
+                    icerik_listesi.append(Image.open(dosya))
                 elif dosya.type == "application/pdf":
                     reader = PdfReader(dosya)
-                    metin = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                    if len(metin.strip()) > 50:
-                        prompt_list.append(f"Döküman İçeriği:\n{metin}")
+                    pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                    
+                    if len(pdf_metni.strip()) > 50:
+                        icerik_listesi.append(f"PDF Metni:\n{pdf_metni}")
                     else:
-                        # Taranmış PDF çözümü (image_cd8a45)
+                        # Taranmış PDF'i görsele çevir (image_cd8a45 çözümü)
                         dosya.seek(0)
-                        prompt_list.extend(pdf2image.convert_from_bytes(dosya.read())[:5])
+                        sayfalar = pdf2image.convert_from_bytes(dosya.read())
+                        icerik_listesi.extend(sayfalar[:5])
                 else:
-                    icerik = metin_ayikla(dosya)
-                    if icerik: prompt_list.append(icerik)
+                    ek_metin = metin_ayikla(dosya)
+                    if ek_metin: icerik_listesi.append(ek_metin)
 
-            # Yanıt Üretme
-            response = model.generate_content(prompt_list)
-            if response:
-                durum.update(label="✅ İşlem Tamamlandı", state="complete")
+            # Yanıt Üretimi
+            response = model.generate_content(icerik_listesi)
+            if response.text:
+                durum.update(label="✅ Analiz Tamamlandı", state="complete")
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
         except Exception as e:
-            durum.update(label="❌ Bağlantı Hatası", state="error")
-            st.error(f"Sistem versiyonları arasında geçiş yapılırken bir hata oluştu: {str(e)}")
+            durum.update(label="❌ Hata", state="error")
+            st.error(f"Sistem Hatası: {str(e)}")
