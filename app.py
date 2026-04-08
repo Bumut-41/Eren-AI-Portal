@@ -2,6 +2,10 @@ import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
 from PIL import Image
+import pdf2image
+import pandas as pd
+from docx import Document
+from pptx import Presentation
 import io
 
 # --- SİSTEM AYARLARI ---
@@ -13,27 +17,30 @@ else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- MODEL TANIMLAMA ---
-# Görsel ve Metin kapasitesi en yüksek model
+# Model: Çok modlu (Multimodal) analiz kapasitesi en yüksek sürüm
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- GELİŞMİŞ DOSYA İŞLEME ---
-def dosyayi_hazirla(yuklenen_dosya):
+# --- DOSYA İŞLEME FONKSİYONLARI ---
+def metin_ayikla(dosya):
     try:
-        if yuklenen_dosya.type == "application/pdf":
-            reader = PdfReader(yuklenen_dosya)
-            metin = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-            
-            # Eğer metin boşsa (dosya taranmış bir dökümansa), PDF'i modele görsel olarak sunamayız.
-            # Bu durumda kullanıcıya uyarı verip metin girişi isteyeceğiz.
-            return metin, "pdf"
+        if dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            return "\n".join([p.text for p in Document(dosya).paragraphs])
         
-        elif yuklenen_dosya.type.startswith("image/"):
-            return Image.open(yuklenen_dosya), "image"
-            
-        return None, None
+        elif "spreadsheetml" in dosya.type or "csv" in dosya.type:
+            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
+            return f"Tablo Verileri:\n{df.to_string()}"
+        
+        elif "presentationml" in dosya.type:
+            prs = Presentation(dosya)
+            text = []
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        text.append(shape.text)
+            return "\n".join(text)
+        return None
     except Exception as e:
-        return f"Hata: {e}", "error"
+        return f"Hata: {str(e)}"
 
 # --- ARAYÜZ ---
 with st.sidebar:
@@ -49,53 +56,54 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş Bölümü
+# Giriş Paneli
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        dosya = st.file_uploader("Dosya", type=['pdf','png','jpg','jpeg'], key="eren_file", label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="final_v3", label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
-# --- İŞLEME ---
+# --- ANA İŞLEMCİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI dökümanı derinlemesine inceliyor...")
+        durum = st.status("🛡️ Eren AI dökümanı analiz ediyor...")
         
         try:
-            prompt_list = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel bir okul asistanısın."]
+            # Prompt hazırlığı
+            prompt_parcalari = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel bir okul asistanısın. Aşağıdaki verileri/görselleri incele ve soruyu yanıtla.", soru]
             
             if dosya:
-                veri, tip = dosyayi_hazirla(dosya)
+                # 1. GÖRSELLER (JPG, PNG)
+                if dosya.type.startswith("image/"):
+                    prompt_parcalari.append(Image.open(dosya))
+                    durum.write("🖼️ Görsel işleniyor...")
                 
-                if tip == "image":
-                    prompt_list.append(veri) # Görseli listeye ekle
-                    prompt_list.append(f"Yukarıdaki görseli analiz et ve şu soruyu yanıtla: {soru}")
-                    durum.write("🖼️ Görsel analiz ediliyor...")
-                elif tip == "pdf":
-                    if veri and len(veri.strip()) > 10:
-                        # Metin bulunduysa metin üzerinden ilerle
-                        prompt_list.append(f"Aşağıdaki döküman metnine göre soruyu yanıtla:\n\n{veri}\n\nSORU: {soru}")
-                        durum.write(f"📝 {len(veri)} karakter metin başarıyla okundu.")
+                # 2. PDF (Taranmış veya Dijital)
+                elif dosya.type == "application/pdf":
+                    # Önce metin okumayı dene
+                    reader = PdfReader(dosya)
+                    metin = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                    
+                    if len(metin.strip()) > 50:
+                        prompt_parcalari.append(f"PDF Metin İçeriği:\n{metin}")
+                        durum.write("📄 PDF metin olarak okundu.")
                     else:
-                        # Metin bulunamadıysa uyarı ver
-                        st.warning("⚠️ Bu PDF'den metin okunamadı (PDF taranmış bir resim olabilir mi?). Lütfen metni kopyalayıp yapıştırın veya dökümanın fotoğrafını yükleyin.")
-                        prompt_list.append(soru)
-            else:
-                prompt_list.append(soru)
-
-            # YANIT ÜRETİMİ
-            response = model.generate_content(prompt_list)
-            
-            if response.text:
-                durum.update(label="✅ Analiz Tamamlandı", state="complete")
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                        # Metin yoksa görselleştirmeye geç (OCR)
+                        durum.write("👁️ PDF metin içermiyor, görsel analiz başlatılıyor...")
+                        images = pdf2image.convert_from_bytes(dosya.read())
+                        prompt_parcalari.extend(images[:5]) # İlk 5 sayfayı görsel olarak ekle
                 
-        except Exception as e:
-            durum.update(label="❌ Hata", state="error")
-            st.error(f"Bir sorun oluştu: {str(e)}")
+                # 3. DİĞER (Word, Excel, PPT)
+                else:
+                    icerik = metin_ayikla(dosya)
+                    if icerik:
+                        prompt_parcalari.append(f"Dosya İçeriği ({dosya.name}):\n{icerik}")
+                        durum.write(f"📂 {dosya.name} başarıyla okundu.")
+
+            # YANIT AL
+            response = model.generate_content
