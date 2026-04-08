@@ -1,10 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
-import pandas as pd
-from docx import Document
-from pptx import Presentation
 from PIL import Image
+import io
 
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
@@ -15,24 +13,27 @@ else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- VERİ AYIKLAMA MOTORU ---
-def veri_ayikla(belge):
-    try:
-        if belge.type == "application/pdf":
-            pdf = PdfReader(belge)
-            return "\n".join([sayfa.extract_text() for sayfa in pdf.pages if sayfa.extract_text()])
-        elif belge.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            return "\n".join([p.text for p in Document(belge).paragraphs])
-        elif "spreadsheet" in belge.type or "csv" in belge.type:
-            df = pd.read_excel(belge) if "spreadsheet" in belge.type else pd.read_csv(belge)
-            return f"Tablo Verisi:\n{df.head(50).to_string()}"
-        return None
-    except Exception as e:
-        return f"HATA: {str(e)}"
-
-# --- MODEL ---
-# Listenizde çalıştığı kesinleşen en güncel önizleme modeli
+# --- MODEL TANIMLAMA ---
+# Görsel ve Metin kapasitesi en yüksek model
 model = genai.GenerativeModel('gemini-3-flash-preview')
+
+# --- GELİŞMİŞ DOSYA İŞLEME ---
+def dosyayi_hazirla(yuklenen_dosya):
+    try:
+        if yuklenen_dosya.type == "application/pdf":
+            reader = PdfReader(yuklenen_dosya)
+            metin = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+            
+            # Eğer metin boşsa (dosya taranmış bir dökümansa), PDF'i modele görsel olarak sunamayız.
+            # Bu durumda kullanıcıya uyarı verip metin girişi isteyeceğiz.
+            return metin, "pdf"
+        
+        elif yuklenen_dosya.type.startswith("image/"):
+            return Image.open(yuklenen_dosya), "image"
+            
+        return None, None
+    except Exception as e:
+        return f"Hata: {e}", "error"
 
 # --- ARAYÜZ ---
 with st.sidebar:
@@ -48,12 +49,11 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş ve Dosya Paneli
+# Giriş Bölümü
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        # 'key' kullanımı dosyanın bellekte kalmasını sağlar
-        dosya = st.file_uploader("Dosya Seç", type=['pdf','docx','xlsx','csv','png','jpg'], key="eren_uploader", label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya", type=['pdf','png','jpg','jpeg'], key="eren_file", label_visibility="collapsed")
     with c2:
         soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
@@ -64,45 +64,38 @@ if soru:
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ İşlem başlatıldı...")
+        durum = st.status("🛡️ Eren AI dökümanı derinlemesine inceliyor...")
         
         try:
-            icerik_metni = ""
-            gorsel_verisi = None
+            prompt_list = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel bir okul asistanısın."]
             
-            # DOSYA KONTROLÜ
             if dosya:
-                durum.write(f"📂 Dosya tespit edildi: {dosya.name}")
-                if dosya.type.startswith("image/"):
-                    gorsel_verisi = Image.open(dosya)
-                    durum.write("🖼️ Görsel işleniyor...")
-                else:
-                    icerik_metni = veri_ayikla(dosya)
-                    if icerik_metni:
-                        durum.write(f"✅ {len(icerik_metni)} karakter metin ayıklandı.")
+                veri, tip = dosyayi_hazirla(dosya)
+                
+                if tip == "image":
+                    prompt_list.append(veri) # Görseli listeye ekle
+                    prompt_list.append(f"Yukarıdaki görseli analiz et ve şu soruyu yanıtla: {soru}")
+                    durum.write("🖼️ Görsel analiz ediliyor...")
+                elif tip == "pdf":
+                    if veri and len(veri.strip()) > 10:
+                        # Metin bulunduysa metin üzerinden ilerle
+                        prompt_list.append(f"Aşağıdaki döküman metnine göre soruyu yanıtla:\n\n{veri}\n\nSORU: {soru}")
+                        durum.write(f"📝 {len(veri)} karakter metin başarıyla okundu.")
                     else:
-                        durum.warning("⚠️ Dosya bulundu ancak metin çıkarılamadı.")
-
-            # PROMPT PAKETLEME
-            sistem_talimati = f"Sen Eren AI'sın. Profesyonel okul asistanısın. Yüklenen dosyaları dikkatle oku. Mod: {mod}."
-            
-            if icerik_metni:
-                # Dosya içeriğini sorunun başına KESİN olarak ekliyoruz
-                tam_mesaj = f"{sistem_talimati}\n\n--- DOSYA İÇERİĞİ ---\n{icerik_metni}\n\n--- SORU ---\n{soru}"
+                        # Metin bulunamadıysa uyarı ver
+                        st.warning("⚠️ Bu PDF'den metin okunamadı (PDF taranmış bir resim olabilir mi?). Lütfen metni kopyalayıp yapıştırın veya dökümanın fotoğrafını yükleyin.")
+                        prompt_list.append(soru)
             else:
-                tam_mesaj = f"{sistem_talimati}\n\n{soru}"
+                prompt_list.append(soru)
 
             # YANIT ÜRETİMİ
-            if gorsel_verisi:
-                response = model.generate_content([sistem_talimati, soru, gorsel_verisi])
-            else:
-                response = model.generate_content(tam_mesaj)
+            response = model.generate_content(prompt_list)
             
             if response.text:
                 durum.update(label="✅ Analiz Tamamlandı", state="complete")
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
-            
+                
         except Exception as e:
-            durum.update(label="❌ Hata Oluştu", state="error")
-            st.error(f"Sistem hatası: {str(e)}")
+            durum.update(label="❌ Hata", state="error")
+            st.error(f"Bir sorun oluştu: {str(e)}")
