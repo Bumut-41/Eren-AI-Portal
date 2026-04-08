@@ -9,7 +9,7 @@ from pptx import Presentation
 import io
 
 # --- SİSTEM AYARLARI ---
-st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Eren AI | Akademik Portalı", page_icon="🛡️", layout="wide")
 
 # API Yapılandırması
 if "GOOGLE_API_KEY" in st.secrets:
@@ -18,9 +18,19 @@ else:
     st.error("API Anahtarı eksik!")
     st.stop()
 
-# --- MODEL TANIMLAMA (Gemini 3 Flash) ---
-# En güncel ve sorunsuz versiyon
+# --- MODEL (Gemini 3 Flash) ---
 model = genai.GenerativeModel('gemini-3-flash-preview')
+
+# --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
+# Web sitesinden alınan temel bilgiler buraya "Context" olarak eklenir.
+OKUL_BILGILERI = """
+Özel Eren Fen ve Teknoloji Lisesi Bilgi Notları:
+- Vizyon: Bilim ve teknolojide öncü, akademik dürüstlüğe sahip bireyler yetiştirmek.
+- İletişim: https://eren.k12.tr/
+- Odak: Fen bilimleri, ileri teknoloji, mühendislik ve akademik başarı.
+- Kullanıcılar: Sadece Özel Eren Fen ve Teknoloji Lisesi öğretmen ve öğrencilerine hizmet verir.
+- Görev: Öğrencileri akademik araştırmalarda, öğretmenleri ise materyal hazırlığında asiste etmek.
+"""
 
 # --- DOSYA İŞLEME FONKSİYONLARI ---
 def metin_ayikla(dosya):
@@ -35,14 +45,18 @@ def metin_ayikla(dosya):
             return "\n".join([shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text")])
         return None
     except Exception as e:
-        return f"Okuma Hatası: {e}"
+        return f"Dosya Okuma Hatası: {e}"
 
-# --- ARAYÜZ ---
+# --- ARAYÜZ (Kurumsal Tasarım) ---
 with st.sidebar:
+    st.image("https://eren.k12.tr/wp-content/uploads/2021/05/eren-logo.png", width=150) # Varsa logo linki
     st.title("🛡️ Eren AI")
-    st.markdown("### Özel Eren Fen ve Teknoloji Lisesi")
+    st.markdown("### **Akademik Destek Sistemi**")
+    st.info("Bu platform Özel Eren Fen ve Teknoloji Lisesi öğrencileri ve öğretmenleri için özel olarak geliştirilmiştir.")
     st.divider()
-    mod = st.selectbox("Asistan Modu", ["Döküman Analizi", "Genel Asistan"])
+    mod = st.selectbox("Asistan Modu", ["Döküman Analizi", "Genel Akademik Asistan", "Sınav Hazırlık Modu"])
+    st.divider()
+    st.caption("© 2026 Eren Eğitim Kurumları")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -55,21 +69,32 @@ for m in st.session_state.messages:
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v3_flash", label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya Yükle", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_final", label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
+        soru = st.chat_input("Akademik sorunuzu buraya yazın...")
 
-# --- İŞLEME ---
+# --- ANA İŞLEMCİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI analiz ediyor...")
+        status_text = "🛡️ Eren AI Akademik Verileri İnceliyor..."
+        durum = st.status(status_text)
+        
         try:
-            # Gemini 3 Flash için içerik listesi
-            icerik_listesi = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel okul asistanısın.", soru]
+            # SİSTEM PROMPT (Kişilik kazandırma)
+            system_instruction = f"""
+            Sen Eren AI'sın. Özel Eren Fen ve Teknoloji Lisesi'nin resmi akademik yapay zeka asistanısın.
+            Amacın: Öğretmen ve öğrencilere akademik yolculuklarında yüksek seviyeli destek sağlamaktır.
+            Dilin: Profesyonel, destekleyici, akademik ve nazik olmalı.
+            Okul Bilgileri: {OKUL_BILGILERI}
+            Eğer kullanıcı okul hakkında soru sorursa, yukarıdaki bilgileri ve eren.k12.tr adresini referans al.
+            Öğrencilere çözüm odaklı, öğretmenlere ise verimlilik odaklı yanıtlar ver.
+            """
+            
+            icerik_listesi = [system_instruction, f"Kullanıcı Modu: {mod}", soru]
             
             if dosya:
                 if dosya.type.startswith("image/"):
@@ -77,24 +102,24 @@ if soru:
                 elif dosya.type == "application/pdf":
                     reader = PdfReader(dosya)
                     pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                    
                     if len(pdf_metni.strip()) > 50:
-                        icerik_listesi.append(f"PDF Metni:\n{pdf_metni}")
+                        icerik_listesi.append(f"Yüklenen PDF İçeriği:\n{pdf_metni}")
                     else:
-                        # Taranmış PDF'i görsele çevir (image_cd8a45 çözümü)
                         dosya.seek(0)
                         sayfalar = pdf2image.convert_from_bytes(dosya.read())
-                        icerik_listesi.extend(sayfalar[:5])
+                        icerik_listesi.extend(sayfalar[:3]) # İlk 3 sayfa görsel olarak
                 else:
                     ek_metin = metin_ayikla(dosya)
-                    if ek_metin: icerik_listesi.append(ek_metin)
+                    if ek_metin: icerik_listesi.append(f"Yüklenen Belge İçeriği:\n{ek_metin}")
 
             # Yanıt Üretimi
             response = model.generate_content(icerik_listesi)
+            
             if response.text:
                 durum.update(label="✅ Analiz Tamamlandı", state="complete")
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
+                
         except Exception as e:
-            durum.update(label="❌ Hata", state="error")
-            st.error(f"Sistem Hatası: {str(e)}")
+            durum.update(label="❌ İşlem Kesildi", state="error")
+            st.error(f"Eren AI şu an yanıt veremiyor: {str(e)}")
