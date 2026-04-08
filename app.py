@@ -136,7 +136,7 @@ if soru:
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI Akademik Temizlik ve Analiz Yapıyor...")
+        durum = st.status("🛡️ Eren AI Akademik Analiz Yapıyor...")
         try:
             system_instruction = f"""
             Sen Özel Eren Fen ve Teknoloji Lisesi akademik asistanısın. {OKUL_BILGILERI}
