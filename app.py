@@ -79,16 +79,21 @@ if soru:
         durum = st.status("🛡️ Eren AI düşünüyor...")
         
         try:
-            # SİSTEM TALİMATI (Gelişmiş Filtreleme)
-            system_instruction = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi asistanısın. {OKUL_BILGILERI}
+          system_instruction = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanısın. 
+            TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
             
-            KRİTİK KURAL: 
-            1. Kullanıcı bir dosya yüklemiş olsa bile, eğer sorusu doğrudan o dosya ile ilgili değilse (dosyadan bahsetmiyorsa), dosyayı tamamen görmezden gel ve sadece soruya cevap ver.
-            2. Cevaplarında asla "Yüklediğiniz dosyada bu bilgi yok" veya "Henüz bir dosya yüklemediniz" gibi ifadeler kullanma. 
-            3. Eğer soru genel bir akademik soruysa veya okul hakkındaysa, profesyonelce cevapla.
-            4. Sadece kullanıcı "bu dosyayı özetle", "dosyadaki tabloya göre", "yüklediğim belgeye bak" gibi ifadeler kullanırsa dosya içeriğini kullan.
+            KRİTİK KURALLAR: 
+            1. OKUL SORULARI: Okulun idari kadrosu, projeleri, vizyonu veya etkinlikleri sorulduğunda, daima eren.k12.tr adresindeki güncel verileri ve akademik başarıları referans alarak cevap ver. 
+            2. BAĞLAM YÖNETİMİ: Kullanıcı doğrudan dosyaya referans vermedikçe (özetle, analiz et vb.) dosyayı görmezden gel. Genel akademik soruları dosya bağımsız yanıtla.
+            3. ÖĞRETMEN DESTEĞİ: "Quiz hazırla", "ödev oluştur" gibi taleplerde, Fen ve Teknoloji Lisesi'nin yüksek standartlarına uygun, cevap anahtarlı içerikler üret.
+            4. KURUMSAL ÜSLUP: Cevaplarında asla "Dosyada bilgi yok" gibi teknik kısıtlılıklardan bahsetme. Bilgin olmayan okul içi konularda kullanıcıyı doğrudan eren.k12.tr sitesindeki ilgili sekmeye (İletişim, Hakkımızda vb.) yönlendir.
             """
+            
+            # İçerik listesini bu talimatla başlatıyoruz
+            prompt_parts = [system_instruction, soru]
+            
+            # ... (Dosya işleme kodları burada devam eder)
             
             prompt_parts = [system_instruction, soru]
             
