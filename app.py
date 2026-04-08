@@ -22,12 +22,16 @@ model = genai.GenerativeModel('gemini-3-flash-preview')
 # --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
 OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
 
-# --- DOSYA ÜRETİM MOTORLARI (v14.1) ---
+# --- GELİŞMİŞ DOSYA ÜRETİM MOTORLARI (v14.2) ---
 
 def word_olustur(icerik):
     doc = Document()
     doc.add_heading('Özel Eren Fen ve Teknoloji Lisesi', 0)
-    doc.add_paragraph(icerik)
+    for line in icerik.split('\n'):
+        if line.startswith('Slayt') or line.startswith('###') or line.startswith('**Slayt'):
+            doc.add_heading(line.replace('#', '').strip(), level=1)
+        else:
+            doc.add_paragraph(line)
     buffer = io.BytesIO()
     doc.save(buffer)
     buffer.seek(0)
@@ -35,16 +39,28 @@ def word_olustur(icerik):
 
 def pptx_olustur(icerik):
     prs = Presentation()
-    slide = prs.slides.add_slide(prs.slide_layouts[1])
-    slide.shapes.title.text = "Eren AI Akademik Notlar"
-    slide.placeholders[1].text = icerik[:1000] # İlk 1000 karakteri slayta ekler
+    # İçeriği "Slayt" anahtar kelimesine göre bölerek sayfalar oluşturur
+    parcalar = icerik.split('Slayt')
+    for i, parca in enumerate(parcalar):
+        if len(parca.strip()) < 10: continue
+        
+        slide_layout = prs.slide_layouts[1]
+        slide = prs.slides.add_slide(slide_layout)
+        
+        satirlar = parca.strip().split('\n')
+        # Slayt başlığını temizle ve ayarla
+        slide.shapes.title.text = satirlar[0].replace(':', '').strip()
+        
+        # İçeriği madde işaretleri olarak ekle
+        tf = slide.placeholders[1].text_frame
+        tf.text = "\n".join(satirlar[1:])
+
     buffer = io.BytesIO()
     prs.save(buffer)
     buffer.seek(0)
     return buffer
 
 def excel_olustur(icerik):
-    # Metni satırlara bölüp Excel'e aktarır
     df = pd.DataFrame(icerik.split('\n'), columns=["Akademik İçerik"])
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
@@ -53,13 +69,12 @@ def excel_olustur(icerik):
     return buffer
 
 def gorsel_olustur(icerik, format="PNG"):
-    # Basit bir görsel oluşturma motoru
-    img = Image.new('RGB', (800, 1000), color=(255, 255, 255))
+    img = Image.new('RGB', (800, 1200), color=(255, 255, 255))
     d = ImageDraw.Draw(img)
     d.text((20, 20), "Özel Eren Fen ve Teknoloji Lisesi", fill=(26, 95, 122))
-    y = 60
-    for satir in icerik.split('\n')[:35]: # Maksimum 35 satır yazar
-        d.text((20, y), satir[:90], fill=(0, 0, 0))
+    y = 70
+    for satir in icerik.split('\n')[:40]:
+        d.text((20, y), satir[:85], fill=(0, 0, 0))
         y += 25
     buffer = io.BytesIO()
     img.save(buffer, format=format)
@@ -88,8 +103,8 @@ with st.sidebar:
     except:
         st.subheader("🛡️ Eren AI")
     
-    st.markdown("### **Çoklu Format Desteği v14.1**")
-    st.info("İçerikleri Word, Excel, PPT veya Görsel olarak indirebilirsiniz.")
+    st.markdown("### **Akademik Çıktı Merkezi v14.2**")
+    st.info("Sunum, Ders Notu ve Tablo üretim modülleri optimize edildi.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
@@ -105,9 +120,9 @@ for m in st.session_state.messages:
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_final_v14", label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_master_v14", label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Ders notu hazırlatın veya dosya analiz ettirin...")
+        soru = st.chat_input("Ders notu, sunum taslağı veya analiz isteyin...")
 
 # --- AKILLI İŞLEMCİ ---
 if soru:
@@ -116,22 +131,20 @@ if soru:
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI İçeriği Hazırlıyor...")
+        durum = st.status("🛡️ Eren AI Akademik Analiz Yapıyor...")
         
         try:
             system_instruction = f"""
-            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanısın. {OKUL_BILGILERI}
-            TEMEL KAYNAĞIN: https://eren.k12.tr/
-
-            KRİTİK KURALLAR: 
-            1. BAĞLAM YÖNETİMİ: Kullanıcı doğrudan dosyaya referans vermedikçe dosyayı görmezden gel.
-            2. ÖĞRETMEN DESTEĞİ: Quiz, ödev veya ders notu taleplerini Fen Lisesi standartlarında cevap anahtarıyla hazırla.
-            3. ÇIKTI FORMATI: Yanıtlarını her zaman çok düzenli ve başlıklar kullanarak ver.
+            Sen Özel Eren Fen ve Teknoloji Lisesi akademik asistanısın. {OKUL_BILGILERI}
+            
+            ÖNEMLİ: Eğer kullanıcı bir sunum veya ders notu hazırlamanı isterse, yanıtını "Slayt 1: Başlık", "Slayt 2: Başlık" formatında bölümlere ayırarak ver. 
+            Bu, dosyaların düzgün oluşturulması için kritiktir.
             """
             
             prompt_parts = [system_instruction, soru]
             
             if dosya:
+                # Akıllı bağlam kontrolü
                 analiz_kelimeleri = ["dosya", "belge", "doküman", "özet", "listele", "tablo", "analiz", "oku", "yüklediğim", "quiz", "soru", "ödev"]
                 if any(kelime in soru.lower() for kelime in analiz_kelimeleri):
                     if dosya.type.startswith("image/"):
@@ -151,24 +164,22 @@ if soru:
             response = model.generate_content(prompt_parts)
             
             if response:
-                durum.update(label="✅ Hazır", state="complete")
+                durum.update(label="✅ İçerik Hazır", state="complete")
                 st.markdown(response.text)
                 
-                # İNDİRME BUTONLARI
+                # İNDİRME PANELİ
                 st.divider()
-                st.write("📥 **Bu içeriği şu formatta indir:**")
+                st.write("📥 **Akademik Dosya Çıktıları:**")
                 
-                b1, b2, b3, b4, b5 = st.columns(5)
-                with b1:
-                    st.download_button("📄 Word", data=word_olustur(response.text), file_name="Eren_AI_DersNotu.docx")
-                with b2:
-                    st.download_button("📊 PPTX", data=pptx_olustur(response.text), file_name="Eren_AI_Sunum.pptx")
-                with b3:
-                    st.download_button("📈 Excel", data=excel_olustur(response.text), file_name="Eren_AI_Tablo.xlsx")
-                with b4:
-                    st.download_button("🖼️ PNG", data=gorsel_olustur(response.text, "PNG"), file_name="Eren_AI_Gorsel.png")
-                with b5:
-                    st.download_button("📷 JPG", data=gorsel_olustur(response.text, "JPEG"), file_name="Eren_AI_Gorsel.jpg")
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.download_button("📄 Word Belgesi", data=word_olustur(response.text), file_name="Eren_AI_Ders_Notu.docx")
+                with col2:
+                    st.download_button("📊 Sunum (PPTX)", data=pptx_olustur(response.text), file_name="Eren_AI_Sunum.pptx")
+                with col3:
+                    st.download_button("📈 Excel Tablo", data=excel_olustur(response.text), file_name="Eren_AI_Veri.xlsx")
+                with col4:
+                    st.download_button("🖼️ PNG Görsel", data=gorsel_olustur(response.text, "PNG"), file_name="Eren_AI_Ozet.png")
 
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
