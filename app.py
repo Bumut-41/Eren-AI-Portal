@@ -10,43 +10,40 @@ from PIL import Image
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# API Anahtarı Yapılandırması
+# API Yapılandırması
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı!")
+    st.error("API Anahtarı bulunamadı! Lütfen Secrets kısmını kontrol edin.")
     st.stop()
 
-# --- DOSYA ANALİZ MOTORLARI ---
-def dosya_icerigini_oku(dosya):
+# --- GELİŞMİŞ DOSYA OKUMA SİSTEMİ ---
+def dosya_cozucu(dosya):
     try:
         if dosya.type == "application/pdf":
-            reader = PdfReader(dosya)
-            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            return "\n".join([p.extract_text() for p in PdfReader(dosya).pages if p.extract_text()])
         elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            doc = Document(dosya)
-            return "\n".join([p.text for p in doc.paragraphs])
+            return "\n".join([p.text for p in Document(dosya).paragraphs])
         elif "presentationml" in dosya.type:
             pptx = Presentation(dosya)
-            text = [shape.text for slide in pptx.slides for shape in slide.shapes if hasattr(shape, "text")]
-            return "\n".join(text)
+            return "\n".join([shape.text for slide in pptx.slides for shape in slide.shapes if hasattr(shape, "text")])
         elif "spreadsheet" in dosya.type or "csv" in dosya.type:
             df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return f"Tablo Verisi Özeti:\n{df.head(100).to_string()}" # İlk 100 satır
+            return f"Veri Özeti:\n{df.head(100).to_string()}"
         return None
     except Exception as e:
-        return f"Dosya Okuma Hatası: {str(e)}"
+        return f"Okuma hatası: {e}"
 
-# --- MODEL YAPILANDIRMASI (Yeni Nesil Flash) ---
-# Listenizdeki en güncel ve stabil sürümü seçtik: gemini-2.0-flash
-model = genai.GenerativeModel('gemini-2.0-flash')
+# --- MODEL SEÇİMİ (Gemini 3 Flash) ---
+# Listenizdeki en güncel önizleme sürümünü kullanıyoruz
+model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- ARAYÜZ TASARIMI ---
+# --- ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI")
     st.markdown("### Özel Eren Fen ve Teknoloji Lisesi")
     st.divider()
-    mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Analiz", "Veli Rehberi"])
+    mod = st.selectbox("Asistan Modu", ["Genel Asistan", "Döküman Analizi", "Akademik Rehber"])
     st.caption("© 2026 Eren Eğitim Kurumları")
 
 if "messages" not in st.session_state:
@@ -56,42 +53,42 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş Alanı
+# Giriş ve Dosya Yükleme
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        belge = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg','jpeg'], label_visibility="collapsed")
+        dosya = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg','jpeg'], label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya bir soru sorun...")
+        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
-# --- İŞLEME ---
+# --- YANIT SÜRECİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        alan = st.empty()
-        alan.info("🛡️ Eren AI (v2.0 Flash) analiz ediyor...")
+        cevap_kutusu = st.empty()
+        cevap_kutusu.info("🛡️ Eren AI (Gemini 3) dökümanları ve soruyu inceliyor...")
         
         try:
-            # Sistem Talimatı ve Kullanıcı Sorusu
-            icerik_listesi = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel ve yardımcı ol.", soru]
+            # Hazırlık
+            prompt_parcalari = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel ve net yanıtlar ver.", soru]
             
-            if belge:
-                if belge.type.startswith("image/"):
-                    icerik_listesi.append(Image.open(belge))
+            if dosya:
+                if dosya.type.startswith("image/"):
+                    prompt_parcalari.append(Image.open(dosya))
                 else:
-                    metin = dosya_icerigini_oku(belge)
-                    if metin:
-                        icerik_listesi.append(f"\n[DÖKÜMAN İÇERİĞİ]:\n{metin}")
+                    icerik = dosya_cozucu(dosya)
+                    if icerik:
+                        prompt_parcalari.append(f"\n[YÜKLENEN BELGE]:\n{icerik}")
 
-            # Yanıt Üretimi
-            yanit = model.generate_content(icerik_listesi)
+            # Üretim
+            response = model.generate_content(prompt_parcalari)
             
-            if yanit.text:
-                alan.markdown(yanit.text)
-                st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            if response.text:
+                cevap_kutusu.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
         except Exception as e:
-            alan.error(f"Erişim Sorunu: {str(e)}")
+            cevap_kutusu.error(f"⚠️ Bir sorun oluştu: {str(e)}")
