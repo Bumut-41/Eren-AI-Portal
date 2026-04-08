@@ -8,7 +8,9 @@ from docx import Document
 from pptx import Presentation
 
 # --- SİSTEM AYARLARI ---
-os.environ["GOOGLE_API_VERSION"] = "v1" # v1beta hatasını önler
+# v1beta hatasını önlemek için çevresel değişkeni en üstte zorluyoruz
+os.environ["GOOGLE_API_VERSION"] = "v1" 
+
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
@@ -17,45 +19,46 @@ else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- GELİŞMİŞ DOSYA OKUMA MOTORU ---
-def dosya_icerigini_coz(dosya):
+# --- GELİŞMİŞ DOSYA ANALİZ MOTORU ---
+def dosya_icerigini_oku(dosya):
     try:
-        # PDF Okuma
+        # 1. PDF Okuma
         if dosya.type == "application/pdf":
-            okuyucu = PdfReader(dosya)
-            return "\n".join([sayfa.extract_text() for sayfa in okuyucu.pages if sayfa.extract_text()])
+            reader = PdfReader(dosya)
+            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
         
-        # Word (DOCX) Okuma
+        # 2. Word (DOCX) Okuma
         elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            belge = Document(dosya)
-            return "\n".join([p.text for p in belge.paragraphs])
+            doc = Document(dosya)
+            return "\n".join([p.text for p in doc.paragraphs])
         
-        # PowerPoint (PPTX) Okuma
+        # 3. PowerPoint (PPTX) Okuma
         elif "presentationml" in dosya.type:
-            sunum = Presentation(dosya)
-            text_runs = []
-            for slide in sunum.slides:
+            pptx = Presentation(dosya)
+            text = []
+            for slide in pptx.slides:
                 for shape in slide.shapes:
                     if hasattr(shape, "text"):
-                        text_runs.append(shape.text)
-            return "\n".join(text_runs)
+                        text.append(shape.text)
+            return "\n".join(text)
         
-        # Excel (XLSX) veya CSV Okuma
+        # 4. Excel (XLSX) veya CSV Okuma
         elif "spreadsheetml" in dosya.type or "csv" in dosya.type:
             df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return f"Tablo Verileri:\n{df.to_string()}"
+            # Veriyi asistanın anlayabileceği özet bir tablo metnine çevirir
+            return f"Tablo Verisi Önemli Satırlar:\n{df.head(20).to_string()}"
             
         return None
     except Exception as e:
-        return f"Dosya işlenirken hata: {e}"
+        return f"Okuma hatası: {str(e)}"
 
-# Model Tanımı
-model = genai.GenerativeModel('models/gemini-1.5-flash')
+# Model Tanımı (v1 zorlamalı tam yol)
+model_engine = genai.GenerativeModel('models/gemini-1.5-flash')
 
 # --- ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI Menü")
-    # Okul Logosu (İnternet üzerinden çekmek en güvenlisi)
+    # Logo yoksa okul adını yazdırır
     st.image("https://eren.k12.tr/wp-content/uploads/2021/05/ozel-eren-logo-1.png", width=180)
     st.divider()
     mod = st.selectbox("Asistan Modu", ["Eren AI Asistanı", "Akademik Analiz", "Veli Bilgilendirme"])
@@ -66,48 +69,50 @@ st.title("🛡️ Eren AI Portalı")
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mesaj Geçmişi
+# Mesaj Geçmişini Yazdır
 for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş Bölümü (Sütunlu Tasarım)
+# Giriş Alanı
 with st.container():
-    sol, sag = st.columns([1, 4])
-    with sol:
+    c1, c2 = st.columns([1, 4])
+    with c1:
         yukle = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg','jpeg'], label_visibility="collapsed")
-    with sag:
-        soru = st.chat_input("Eren AI'ya sorun...")
+    with c2:
+        soru = st.chat_input("Eren AI'ya bir soru sorun...")
 
-# --- YANIT ÜRETİMİ ---
+# --- İŞLEME MANTIĞI ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        cevap_alani = st.empty()
-        cevap_alani.markdown("⚡ *Dökümanlar ve veriler analiz ediliyor...*")
+        alan = st.empty()
+        alan.info("🛡️ Eren AI verileri işliyor...")
         
         try:
-            prompt_havuzu = [f"Sen Eren AI'sın. Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}.", soru]
+            # Sistem talimatı ve kullanıcı sorusu
+            prompt = [f"Sen Eren AI'sın. Mod: {mod}. Profesyonel bir lise asistanısın.", soru]
             
             if yukle:
                 if yukle.type.startswith("image/"):
-                    # Görsel ise doğrudan yapay zekaya gönder
-                    prompt_havuzu.append(PIL.Image.open(yukle))
+                    # Görseli doğrudan gönder
+                    prompt.append(PIL.Image.open(yukle))
                 else:
-                    # Metin/Tablo tabanlıysa içeriği oku ve metin olarak ekle
-                    metin = dosya_icerigini_coz(yukle)
-                    if metin:
-                        prompt_havuzu.append(f"\n[DÖKÜMAN İÇERİĞİ]:\n{metin}")
+                    # Diğer belgeleri metne çevirip gönder
+                    metin_verisi = dosya_icerigini_oku(yukle)
+                    if metin_verisi:
+                        prompt.append(f"\n[YÜKLENEN BELGE İÇERİĞİ]:\n{metin_verisi}")
 
-            # Yanıt Üret
-            yanit = model.generate_content(prompt_havuzu)
+            # Yanıt Üret (v1 yolu üzerinden)
+            response = model_engine.generate_content(prompt)
             
-            if yanit.text:
-                cevap_alani.markdown(yanit.text)
-                st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+            if response.text:
+                alan.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
         except Exception as e:
-            cevap_alani.error(f"Sistem Hatası: {str(e)}")
+            # Hata mesajını yakala ve kullanıcıya temiz göster
+            alan.error(f"Sistem hatası oluştu. Lütfen sayfayı yenileyin. Detay: {str(e)}")
