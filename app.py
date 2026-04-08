@@ -9,110 +9,92 @@ import io
 import re
 
 # --- SİSTEM AYARLARI ---
-st.set_page_config(page_title="Eren AI | Akademik Portal", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Eren AI | Kurumsal Portal", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı!")
+    st.error("API Anahtarı eksik!")
     st.stop()
 
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
-OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
+# --- KURUMSAL BİLGİLER ---
+OKUL_BILGILERI = "Özel Eren Fen ve Teknoloji Lisesi | Akademik Asistan Sistemi"
 
-# --- GELİŞMİŞ DOSYA ÜRETİM MOTORLARI (v14.4 - Şablonlu) ---
+# --- GELİŞMİŞ DOSYA ÜRETİM MOTORLARI (v14.5) ---
 
 def metin_temizle(metin):
-    metin = metin.replace('**', '').replace('*', '').replace('$', '')
+    # Markdown, LaTeX ve gereksiz karakter temizliği
+    metin = re.sub(r'\*\*|\$|\*', '', metin)
     metin = metin.replace('\\times', 'x').replace('\\cdot', '.').replace('^{', '^').replace('}', '')
     return metin.strip()
 
-def word_olustur(icerik):
-    doc = Document()
-    doc.add_heading('Özel Eren Fen ve Teknoloji Lisesi', 0)
-    for line in icerik.split('\n'):
-        temiz_line = line.replace('**', '').replace('$', '')
-        if temiz_line.startswith('Slayt') or temiz_line.startswith('###'):
-            doc.add_heading(temiz_line.replace('#', '').strip(), level=1)
-        else:
-            doc.add_paragraph(temiz_line)
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
 def pptx_olustur(icerik):
     try:
-        # Şablon dosyasını kullan (template.pptx adıyla yüklendiği varsayılır)
+        # Şablonu yükle
         prs = Presentation("template.pptx")
+        # Şablondaki mevcut tüm slaytları sil (Karman çormanlığı önler)
+        xml_slides = prs.slides._sldIdLst
+        slides = list(xml_slides)
+        for s in slides:
+            xml_slides.remove(s)
     except:
-        # Şablon bulunamazsa boş sunum aç
         prs = Presentation()
     
+    # İçeriği parçala
     parcalar = re.split(r'Slayt \d+:', icerik)
     
-    for i, parca in enumerate(parcalar):
+    for parca in parcalar:
         if len(parca.strip()) < 10: continue
         
-        # Şablondaki uygun düzeni seç (Genellikle 1. veya 2. layout)
+        # Tasarımı koru: Şablondaki 2. düzeni (Başlık + İçerik) kullan
         try:
-            slide_layout = prs.slide_layouts[1] 
+            slide_layout = prs.slide_layouts[1]
         except:
             slide_layout = prs.slide_layouts[0]
             
         slide = prs.slides.add_slide(slide_layout)
         satirlar = parca.strip().split('\n')
         
-        # Başlık ve İçerik Yerleştirme
+        # Başlığı yerleştir
         if slide.shapes.title:
             slide.shapes.title.text = metin_temizle(satirlar[0])
         
-        # İçeriği placeholders üzerinden ekle
+        # İçeriği yerleştir (Hizalamayı bozmadan sadece metin ekle)
         for shape in slide.placeholders:
-            if shape.placeholder_format.type == 2: # Body/İçerik alanı
+            if shape.placeholder_format.type == 2: # İçerik kutusu
                 tf = shape.text_frame
-                tf.text = ""
-                for satir in satirlar[1:]:
+                tf.word_wrap = True # Otomatik satır kaydırma
+                for i, satir in enumerate(satirlar[1:]):
                     temiz_satir = metin_temizle(satir)
                     if temiz_satir:
-                        p = tf.add_paragraph()
+                        p = tf.add_paragraph() if i > 0 else tf.paragraphs[0]
                         p.text = temiz_satir
-                        p.level = 0
+                        p.level = 0 # Madde işareti seviyesi
 
     buffer = io.BytesIO()
     prs.save(buffer)
     buffer.seek(0)
     return buffer
 
-def excel_olustur(icerik):
-    df = pd.DataFrame(icerik.split('\n'), columns=["Akademik İçerik"])
+def word_olustur(icerik):
+    doc = Document()
+    doc.add_heading('Eren Fen ve Teknoloji Lisesi Akademik Notlar', 0)
+    for line in icerik.split('\n'):
+        if line.strip():
+            doc.add_paragraph(metin_temizle(line))
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
+    doc.save(buffer)
     buffer.seek(0)
     return buffer
 
-def gorsel_olustur(icerik, format="PNG"):
-    img = Image.new('RGB', (800, 1200), color=(255, 255, 255))
-    d = ImageDraw.Draw(img)
-    d.text((20, 20), "Özel Eren Fen ve Teknoloji Lisesi", fill=(26, 95, 122))
-    y = 70
-    for satir in icerik.split('\n')[:40]:
-        d.text((20, y), metin_temizle(satir)[:85], fill=(0, 0, 0))
-        y += 25
-    buffer = io.BytesIO()
-    img.save(buffer, format=format)
-    buffer.seek(0)
-    return buffer
-
-# --- ARAYÜZ VE SÜREÇ ---
+# --- ARAYÜZ ---
 with st.sidebar:
-    try: st.image("Logo.png", use_container_width=True)
-    except: st.subheader("🛡️ Eren AI")
-    st.markdown("### **Kurumsal Çıktı Merkezi v14.4**")
-    st.info("PowerPoint çıktıları artık okul şablonuna göre üretilmektedir.")
+    st.markdown("### **Kurumsal Portal v14.5**")
+    st.success("Hizalama ve Şablon Temizliği Optimize Edildi.")
+    st.divider()
+    st.caption("Eren Eğitim Kurumları © 2026")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -120,35 +102,33 @@ if "messages" not in st.session_state:
 for m in st.session_state.messages:
     with st.chat_message(m["role"]): st.markdown(m["content"])
 
-with st.container():
-    c1, c2 = st.columns([1, 4])
-    with c1:
-        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','png','jpg'], key="v14_4_final", label_visibility="collapsed")
-    with c2:
-        soru = st.chat_input("Ders notu veya şablonlu sunum hazırlatın...")
+soru = st.chat_input("Konuyu yazın, kurumsal sunumu hazırlayayım...")
 
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        durum = st.status("🛡️ Eren AI Şablona Uygun İçerik Üretiyor...")
+        durum = st.status("🛡️ Kurumsal şablon üzerine içerik işleniyor...")
         try:
-            system_instruction = f"Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. {OKUL_BILGILERI} Sunum taleplerinde 'Slayt 1:', 'Slayt 2:' formatını kullan."
-            response = model.generate_content([system_instruction, soru])
+            prompt = f"{OKUL_BILGILERI} Sunum hazırla. Format: Slayt 1: Başlık, Slayt 2: Başlık... \nSoru: {soru}"
+            response = model.generate_content(prompt)
             
             if response:
-                durum.update(label="✅ Şablonlu Dosyalar Hazır", state="complete")
+                durum.update(label="✅ Sunum Hazır!", state="complete")
                 st.markdown(response.text)
                 
                 st.divider()
-                st.write("📥 **Kurumsal Dosyalar:**")
-                col1, col2, col3, col4 = st.columns(4)
-                with col1: st.download_button("📄 Word", data=word_olustur(response.text), file_name="Eren_AI_Not.docx")
-                with col2: st.download_button("📊 Kurumsal Sunum", data=pptx_olustur(response.text), file_name="Eren_AI_Sablonlu_Sunum.pptx")
-                with col3: st.download_button("📈 Excel", data=excel_olustur(response.text), file_name="Eren_AI_Tablo.xlsx")
-                with col4: st.download_button("🖼️ PNG", data=gorsel_olustur(response.text, "PNG"), file_name="Eren_AI_Gorsel.png")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.download_button("📊 Kurumsal Sunumu İndir", 
+                                     data=pptx_olustur(response.text), 
+                                     file_name="Eren_K12_Sunum.pptx")
+                with c2:
+                    st.download_button("📄 Word Notlarını İndir", 
+                                     data=word_olustur(response.text), 
+                                     file_name="Akademik_Notlar.docx")
 
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
         except Exception as e:
-            st.error(f"Hata: {e}")
+            st.error(f"Hata oluştu: {e}")
