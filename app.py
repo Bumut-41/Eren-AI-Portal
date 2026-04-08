@@ -1,50 +1,43 @@
 import streamlit as st
-import google.generativeai as genai
-from google.generativeai import client
+import requests
+import json
 import PIL.Image
-import os
+import base64
 import pandas as pd
 from PyPDF2 import PdfReader
 from docx import Document
 from pptx import Presentation
+from io import BytesIO
 
-# --- 1. API VERSİYONUNU ÇEKİRDEKTEN KİLİTLEME ---
-# v1beta hatasını önlemek için SDK'yı v1 kullanmaya zorlarız
-client._API_VERSION = "v1"
-os.environ["GOOGLE_API_VERSION"] = "v1"
-
+# --- 1. SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
 else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- 2. GELİŞMİŞ DOSYA OKUMA SİSTEMİ ---
-def dosya_cozucu(dosya):
+# Doğrudan v1 adresini kullanıyoruz, v1beta hatası imkansız hale geliyor
+API_URL = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={API_KEY}"
+
+# --- 2. GELİŞMİŞ DOSYA OKUYUCU ---
+def dosya_oku(dosya):
     try:
         if dosya.type == "application/pdf":
-            r = PdfReader(dosya)
-            return "\n".join([p.extract_text() for p in r.pages if p.extract_text()])
+            return "\n".join([p.extract_text() for p in PdfReader(dosya).pages if p.extract_text()])
         elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            d = Document(dosya)
-            return "\n".join([p.text for p in d.paragraphs])
+            return "\n".join([p.text for p in Document(dosya).paragraphs])
         elif "presentationml" in dosya.type:
-            p = Presentation(dosya)
-            return "\n".join([shape.text for slide in p.slides for shape in slide.shapes if hasattr(shape, "text")])
+            return "\n".join([s.text for sl in Presentation(dosya).slides for s in sl.shapes if hasattr(s, "text")])
         elif "spreadsheet" in dosya.type or "csv" in dosya.type:
             df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return f"Tablo Verisi:\n{df.to_string()}"
+            return df.to_string()
         return None
     except Exception as e:
-        return f"Okuma Hatası: {e}"
+        return f"Hata: {e}"
 
-# --- 3. MODEL TANIMI (HATA ÖNLEYİCİ YOL) ---
-# Sürüm çakışmasını önlemek için tam model yolunu kullanıyoruz
-model = genai.GenerativeModel('models/gemini-1.5-flash')
-
-# --- 4. ARAYÜZ ---
+# --- 3. ARAYÜZ ---
 with st.sidebar:
     st.title("🛡️ Eren AI")
     st.image("https://eren.k12.tr/wp-content/uploads/2021/05/ozel-eren-logo-1.png", width=180)
@@ -62,11 +55,11 @@ for m in st.session_state.messages:
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        belge = st.file_uploader("Dosya", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
+        belge = st.file_uploader("Belge", type=['pdf','docx','pptx','xlsx','csv','png','jpg'], label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
+        soru = st.chat_input("Eren AI'ya sorun...")
 
-# --- 5. İŞLEME ---
+# --- 4. REST API İLE YANIT ÜRETİMİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
@@ -74,21 +67,34 @@ if soru:
 
     with st.chat_message("assistant"):
         alan = st.empty()
-        alan.info("🛡️ Eren AI v1 kanalı üzerinden analiz ediyor...")
+        alan.info("🛡️ Eren AI doğrudan v1 kanalıyla bağlanıyor...")
         
-        try:
-            icerik = [f"Sen Eren AI'sın. Mod: {mod}.", soru]
-            if belge:
-                if belge.type.startswith("image/"):
-                    icerik.append(PIL.Image.open(belge))
-                else:
-                    metin = dosya_cozucu(belge)
-                    if metin:
-                        icerik.append(f"\n[DÖKÜMAN İÇERİĞİ]:\n{metin}")
+        # İçerik Hazırlama
+        prompt_text = f"Sen Eren AI'sın. Özel Eren Fen ve Teknoloji Lisesi asistanısın. Mod: {mod}. Soru: {soru}"
+        payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+        
+        if belge:
+            if belge.type.startswith("image/"):
+                img_data = base64.b64encode(belge.read()).decode('utf-8')
+                payload["contents"][0]["parts"].append({
+                    "inline_data": {"mime_type": belge.type, "data": img_data}
+                })
+            else:
+                metin = dosya_oku(belge)
+                if metin:
+                    payload["contents"][0]["parts"][0]["text"] += f"\n\nBelge İçeriği:\n{metin}"
 
-            yanit = model.generate_content(icerik)
-            if yanit.text:
-                alan.markdown(yanit.text)
-                st.session_state.messages.append({"role": "assistant", "content": yanit.text})
+        # API Çağrısı (REST üzerinden)
+        try:
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(API_URL, headers=headers, data=json.dumps(payload))
+            result = response.json()
+            
+            if "candidates" in result:
+                cevap = result["candidates"][0]["content"]["parts"][0]["text"]
+                alan.markdown(cevap)
+                st.session_state.messages.append({"role": "assistant", "content": cevap})
+            else:
+                alan.error(f"API Hatası: {result.get('error', {}).get('message', 'Bilinmeyen hata')}")
         except Exception as e:
-            alan.error(f"Erişim Hatası: {str(e)}")
+            alan.error(f"Bağlantı Hatası: {e}")
