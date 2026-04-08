@@ -9,28 +9,29 @@ from PIL import Image
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI Portalı", page_icon="🛡️", layout="wide")
 
-# API Yapılandırması
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı eksik!")
+    st.error("API Anahtarı bulunamadı!")
     st.stop()
 
-# --- GELİŞMİŞ METİN AYIKLAYICI ---
-def metni_cikar(dosya):
+# --- VERİ AYIKLAMA MOTORU ---
+def veri_ayikla(belge):
     try:
-        if dosya.type == "application/pdf":
-            return "\n".join([p.extract_text() for p in PdfReader(dosya).pages if p.extract_text()])
-        elif dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            return "\n".join([p.text for p in Document(dosya).paragraphs])
-        elif "spreadsheet" in dosya.type or "csv" in dosya.type:
-            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return df.to_string()
+        if belge.type == "application/pdf":
+            pdf = PdfReader(belge)
+            return "\n".join([sayfa.extract_text() for sayfa in pdf.pages if sayfa.extract_text()])
+        elif belge.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            return "\n".join([p.text for p in Document(belge).paragraphs])
+        elif "spreadsheet" in belge.type or "csv" in belge.type:
+            df = pd.read_excel(belge) if "spreadsheet" in belge.type else pd.read_csv(belge)
+            return f"Tablo Verisi:\n{df.head(50).to_string()}"
         return None
     except Exception as e:
-        return f"Okuma Hatası: {e}"
+        return f"HATA: {str(e)}"
 
 # --- MODEL ---
+# Listenizde çalıştığı kesinleşen en güncel önizleme modeli
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
 # --- ARAYÜZ ---
@@ -40,7 +41,6 @@ with st.sidebar:
     st.divider()
     mod = st.selectbox("Asistan Modu", ["Döküman Analizi", "Genel Asistan"])
 
-# Sohbet Geçmişi
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -48,55 +48,61 @@ for m in st.session_state.messages:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
 
-# Giriş Alanı
+# Giriş ve Dosya Paneli
 with st.container():
     c1, c2 = st.columns([1, 4])
     with c1:
-        # ANAHTAR DEĞİŞİKLİK: 'key' parametresi eklendi
-        belge = st.file_uploader("Dosya", type=['pdf','docx','xlsx','csv','png','jpg'], key="file_input", label_visibility="collapsed")
+        # 'key' kullanımı dosyanın bellekte kalmasını sağlar
+        dosya = st.file_uploader("Dosya Seç", type=['pdf','docx','xlsx','csv','png','jpg'], key="eren_uploader", label_visibility="collapsed")
     with c2:
-        soru = st.chat_input("Eren AI'ya bir soru sorun...")
+        soru = st.chat_input("Eren AI'ya sorunuzu iletin...")
 
-# --- İŞLEME VE YANIT ---
+# --- İŞLEME ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
 
     with st.chat_message("assistant"):
-        cevap_kutusu = st.empty()
-        cevap_kutusu.info("🛡️ Eren AI dosyayı ve soruyu analiz ediyor...")
+        durum = st.status("🛡️ İşlem başlatıldı...")
         
         try:
-            # 1. DOSYAYI ANLIK OLARAK YAKALA
-            belge_metni = ""
-            gorsel = None
+            icerik_metni = ""
+            gorsel_verisi = None
             
-            if belge:
-                if belge.type.startswith("image/"):
-                    gorsel = Image.open(belge)
+            # DOSYA KONTROLÜ
+            if dosya:
+                durum.write(f"📂 Dosya tespit edildi: {dosya.name}")
+                if dosya.type.startswith("image/"):
+                    gorsel_verisi = Image.open(dosya)
+                    durum.write("🖼️ Görsel işleniyor...")
                 else:
-                    belge_metni = metni_cikar(belge)
+                    icerik_metni = veri_ayikla(dosya)
+                    if icerik_metni:
+                        durum.write(f"✅ {len(icerik_metni)} karakter metin ayıklandı.")
+                    else:
+                        durum.warning("⚠️ Dosya bulundu ancak metin çıkarılamadı.")
 
-            # 2. PROMPT'U TEK BİR PAKET HALİNE GETİR
-            # Modelin "dosya yok" demesini engelleyen yapı
-            talimat = f"Sen Eren AI'sın. Profesyonel okul asistanısın. Mod: {mod}."
+            # PROMPT PAKETLEME
+            sistem_talimati = f"Sen Eren AI'sın. Profesyonel okul asistanısın. Yüklenen dosyaları dikkatle oku. Mod: {mod}."
             
-            if belge_metni:
-                # Dosya içeriğini sorunun hemen üzerine 'mühürlüyoruz'
-                hazir_soru = f"{talimat}\n\n[SİSTEM: AŞAĞIDAKİ METİN YÜKLENEN DOSYADAN OKUNDU]\n{belge_metni}\n\n[SORU]: {soru}"
+            if icerik_metni:
+                # Dosya içeriğini sorunun başına KESİN olarak ekliyoruz
+                tam_mesaj = f"{sistem_talimati}\n\n--- DOSYA İÇERİĞİ ---\n{icerik_metni}\n\n--- SORU ---\n{soru}"
             else:
-                hazir_soru = f"{talimat}\n\n[SORU]: {soru}"
+                tam_mesaj = f"{sistem_talimati}\n\n{soru}"
 
-            # 3. YANIT ÜRET
-            if gorsel:
-                res = model.generate_content([talimat, soru, gorsel])
+            # YANIT ÜRETİMİ
+            if gorsel_verisi:
+                response = model.generate_content([sistem_talimati, soru, gorsel_verisi])
             else:
-                res = model.generate_content(hazir_soru)
+                response = model.generate_content(tam_mesaj)
             
-            if res.text:
-                cevap_kutusu.markdown(res.text)
-                st.session_state.messages.append({"role": "assistant", "content": res.text})
+            if response.text:
+                durum.update(label="✅ Analiz Tamamlandı", state="complete")
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
             
         except Exception as e:
-            cevap_kutusu.error(f"⚠️ Hata oluştu: {str(e)}")
+            durum.update(label="❌ Hata Oluştu", state="error")
+            st.error(f"Sistem hatası: {str(e)}")
