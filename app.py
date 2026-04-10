@@ -6,10 +6,9 @@ import pdf2image
 import pandas as pd
 from docx import Document
 from pptx import Presentation
-import io
 
 # --- SİSTEM AYARLARI ---
-st.set_page_config(page_title="Eren AI | Akademik Portal", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Eren AI | Akademik Rehber", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -22,7 +21,7 @@ model = genai.GenerativeModel('gemini-3-flash-preview')
 # --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
 OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
 
-# --- DOSYA TEMİZLEME VE SIFIRLAMA ---
+# --- DOSYA TEMİZLEME SİSTEMİ ---
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
@@ -32,7 +31,7 @@ def metin_ayikla(dosya):
             return "\n".join([p.text for p in Document(dosya).paragraphs])
         elif "spreadsheet" in dosya.type or "csv" in dosya.type:
             df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
-            return f"TABLO VERİSİ:\n{df.to_string()}"
+            return f"VERİ SETİ:\n{df.to_string()}"
         elif "presentationml" in dosya.type:
             prs = Presentation(dosya)
             return "\n".join([shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text")])
@@ -46,8 +45,8 @@ with st.sidebar:
         st.image("Logo.png", use_container_width=True)
     except:
         st.subheader("🛡️ Eren AI")
-    st.markdown("### **Akademik Portal v16.2**")
-    st.info("Tam Analiz Modu: Konu anlatımı + Adım adım tüm soruların çözümü.")
+    st.markdown("### **Akademik Rehber v17.0**")
+    st.success("Eğitici Mod: Odak noktası cevap değil, öğrenmedir.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
@@ -64,12 +63,12 @@ with chat_area:
 # --- GİRİŞ PANELİ (ALTTA SABİT) ---
 with st.container():
     st.write("---")
-    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
+    dosya = st.file_uploader("Eğitilecek Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
-    soru = st.chat_input("Tüm soruları analiz et ve çözümlerini anlat...")
+    soru = st.chat_input("Konuyu anlamak için bir soru sorun veya dosyanızı analiz ettirin...")
 
-# --- AKILLI İŞLEMCİ ---
+# --- AKADEMİK İŞLEMCİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with chat_area:
@@ -78,17 +77,21 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Soruları Çözüyor...")
+            durum = st.status("🛡️ Eren AI Akademik Analiz Başlatıyor...")
             
             try:
+                # --- SOKRATİK EĞİTMEN TALİMATI ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin "Baş Akademik Danışmanısın". {OKUL_BILGILERI}
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin "Baş Akademik Rehberisin". {OKUL_BILGILERI}
                 
-                GÖREVİN: 
-                1. EKSİKSİZ ÇÖZÜM: Yüklenen dosyadaki TÜM soruları tek tek tespit et ve hiçbirini atlamadan çöz.
-                2. ÖĞRETİCİ ANALİZ: Her sorunun çözümünden önce, o soruda kullanılan matematiksel kuralı (Örn: İki kare farkı, basamak analizi vb.) derinlemesine açıkla.
-                3. ADIM ADIM İŞLEM: Çözümleri sadece sonuç olarak değil, işlem basamaklarıyla göster.
-                4. KISITLAMA: Cevap sonuna web sitesi veya kütüphane yönlendirmesi ekleme.
+                TEMEL FELSEFEN: Öğrenciye cevabı vermek yerine, cevabı bulmasını sağlayacak yolu öğretmek.
+                
+                NASIL DAVRANMALISIN:
+                1. KAVRAMSAL ANLATIM: Bir soru sorulduğunda, sorudaki sayıları kullanmadan önce konunun mantığını (teorisini) açıkla.
+                2. STRATEJİ BELİRLEME: "Bu soruyu çözmek için şu adımları izlemelisin" diyerek yol haritası sun.
+                3. DERİNLİK: Fen ve Teknoloji Lisesi düzeyinde teknik terimleri kullanarak akademik derinlik sağla.
+                4. ETKİLEŞİM: Anlatımın arasına "Buradaki mantığı anladın mı?" veya "Sence bir sonraki adım ne olmalı?" gibi sorular ekleyerek öğrenciyi aktif tut.
+                5. KESİN YASAK: Cevapların sonuna otomatik kütüphane veya web sitesi yönlendirmesi ekleme.
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -99,19 +102,19 @@ if soru:
                     elif dosya.type == "application/pdf":
                         reader = PdfReader(dosya)
                         pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                        prompt_parts.append(f"DOSYA İÇERİĞİ:\n{pdf_metni}")
+                        prompt_parts.append(f"ÖĞRETİLECEK MATERYAL:\n{pdf_metni}")
                     else:
                         ek_metin = metin_ayikla(dosya)
-                        if ek_metin: prompt_parts.append(f"DOSYA İÇERİĞİ:\n{ek_metin}")
+                        if ek_metin: prompt_parts.append(f"ÖĞRETİLECEK MATERYAL:\n{ek_metin}")
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Çözümler Hazır", state="complete")
+                    durum.update(label="✅ Anlatım Hazır", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
-                    # İşlem bittiğinde dosya alanını temizlemek için counter'ı artırıyoruz
+                    # İşlem sonrası dosya yükleyiciyi temizle
                     if dosya:
                         st.session_state.uploader_key += 1
                         st.rerun() 
