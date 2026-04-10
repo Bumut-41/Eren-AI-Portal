@@ -22,26 +22,27 @@ model = genai.GenerativeModel('gemini-3-flash-preview')
 # --- KURUMSAL TABAN ---
 OKUL_BILGILERI = "Özel Eren Fen ve Teknoloji Lisesi (https://eren.k12.tr/)"
 
-# --- DOSYA İŞLEME VE TEMİZLEME (v15.1) ---
-
 def metin_temizle(metin):
-    # Markdown ve LaTeX kalıntılarını profesyonel sunum için temizler
+    # Markdown ve LaTeX sembollerini temizle
     metin = re.sub(r'\*\*|\$|\*', '', metin)
     return metin.strip()
 
 def pptx_olustur(icerik):
     try:
         prs = Presentation("template.pptx")
-        # Eski slaytları temizle (Görsel 7'deki karışıklığı önler)
-        xml_slides = prs.slides._sldIdLst
-        for s in list(xml_slides): xml_slides.remove(s)
+        # Şablondaki mevcut tüm slaytları siliyoruz (Görsel 7 ve 9'daki karmaşayı önler)
+        while len(prs.slides) > 0:
+            rId = prs.slides._sldIdLst[0].rId
+            prs.part.drop_rel(rId)
+            del prs.slides._sldIdLst[0]
     except:
         prs = Presentation()
     
     parcalar = re.split(r'Slayt \d+:', icerik)
     for parca in parcalar:
         if len(parca.strip()) < 10: continue
-        # Şablon düzenini koru
+        
+        # Tasarımlı boş sayfa ekle (Şablonun ana yapısını kullanır)
         layout = prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0]
         slide = prs.slides.add_slide(layout)
         satirlar = parca.strip().split('\n')
@@ -66,7 +67,7 @@ def pptx_olustur(icerik):
 
 def word_olustur(icerik):
     doc = Document()
-    doc.add_heading('Eren Fen ve Teknoloji Lisesi Akademik Rapor', 0)
+    doc.add_heading('Eren AI Akademik Rapor', 0)
     for line in icerik.split('\n'):
         if line.strip(): doc.add_paragraph(metin_temizle(line))
     buffer = io.BytesIO()
@@ -78,9 +79,7 @@ def word_olustur(icerik):
 with st.sidebar:
     try: st.image("Logo.png", use_container_width=True)
     except: st.title("🛡️ Eren AI")
-    st.info("v15.1: Dosya Okuma ve Şablon Uyumu Aktif")
-    st.divider()
-    st.caption("© 2026 Eren Eğitim Kurumları")
+    st.info("v15.2: Gelişmiş Dosya Okuma Motoru")
 
 # Sohbet Geçmişi
 if "messages" not in st.session_state: st.session_state.messages = []
@@ -89,45 +88,14 @@ for m in st.session_state.messages:
 
 # Giriş Alanı
 with st.container():
-    col_file, col_text = st.columns([1, 3])
-    with col_file:
-        yuklenen_dosya = st.file_uploader("Belge/Görsel", type=['pdf','docx','xlsx','png','jpg','pptx'])
-    with col_text:
-        soru = st.chat_input("Yüklediğim dosyayı özetle veya sunum yap...")
+    yuklenen_dosya = st.file_uploader("Belge/Görsel Yükle", type=['pdf','docx','xlsx','png','jpg','pptx'], key="file_v15_2")
+    soru = st.chat_input("Dosyayı özetle veya bir konu yaz...")
 
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        islem = st.status("🛡️ Dosya okunuyor ve analiz ediliyor...")
+        islem = st.status("🛡️ Eren AI dosyayı satır satır inceliyor...")
         try:
-            # Model talimatları
-            besleme = [f"Sen Eren Fen ve Teknoloji Lisesi asistanısın. {OKUL_BILGILERI}. Sunumlarda 'Slayt 1: [Başlık]' yapısını kullan.", soru]
-            
-            # DOSYA OKUMA MOTORU (v15.1 Fix)
-            if yuklenen_dosya:
-                if yuklenen_dosya.type.startswith("image/"):
-                    besleme.append(Image.open(yuklenen_dosya))
-                elif yuklenen_dosya.type == "application/pdf":
-                    pdf_metni = "\n".join([p.extract_text() for p in PdfReader(yuklenen_dosya).pages])
-                    besleme.append(f"ANALİZ EDİLECEK DOSYA METNİ:\n{pdf_metni}")
-                elif "officedocument" in yuklenen_dosya.type: # Word/PPTX
-                    # Basit metin ayıklama
-                    besleme.append("Kullanıcı bir belge yükledi, içeriğe göre yanıt ver.")
-            
-            response = model.generate_content(besleme)
-            
-            if response:
-                islem.update(label="✅ Analiz Tamamlandı", state="complete")
-                st.markdown(response.text)
-                
-                # İndirme Butonları
-                st.divider()
-                b1, b2 = st.columns(2)
-                with b1: st.download_button("📊 Kurumsal Sunum", data=pptx_olustur(response.text), file_name="Eren_AI_Sunum.pptx")
-                with b2: st.download_button("📄 Word Raporu", data=word_olustur(response.text), file_name="Eren_AI_Analiz.docx")
-                
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-        except Exception as e:
-            st.error(f"Hata: {e}")
+            besleme = [f"Sen Eren Fen ve Teknoloji Lisesi asistanısın. {OKUL_BILGILERI}. Sunuml
