@@ -36,7 +36,7 @@ def sidebar_ciz():
         
         st.markdown("---")
         st.markdown("### **🛡️ Akademik Rehber v19.0**")
-        st.success("**Eğitici Mod Aktif:** Analitik ve derinlemesine öğrenme süreci.")
+        st.success("**Eren AI Education")
         
         st.info("""
         **Nasıl Kullanılır?**
