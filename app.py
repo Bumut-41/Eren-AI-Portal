@@ -26,7 +26,7 @@ OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SOL MENÜ (EKRAN GÖRÜNTÜSÜNE GÖRE BİREBİR GÜNCEL) ---
+# --- SOL MENÜ (EKRAN GÖRÜNTÜSÜYLE BİREBİR) ---
 def sidebar_ciz():
     with st.sidebar:
         try:
@@ -35,10 +35,9 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **🛡️ Akademik Rehber v17.8**")
+        st.markdown("### **🛡️ Akademik Rehber v18.0**")
         st.success("**Eğitici Mod Aktif:** Her soru bir ders niteliğindedir.")
         
-        # Ekran görüntüsündeki metin yapısı
         st.info("""
         **Nasıl Kullanılır?**
         1. Ödev dosyanı aşağıdan yükle.
@@ -79,23 +78,26 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Akademik Değerlendirme Yapıyor...")
+            durum = st.status("🛡️ Eren AI Soruları Tek Tek Analiz Ediyor...")
             
             try:
-                # --- KATIDAKİ EĞİTİCİ TALİMAT (CEVAP VERMEK YASAKLANDI) ---
+                # --- GÜNCELLENMİŞ KURUMSAL VE SORU ODAKLI TALİMAT ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin Baş Akademik Rehberisin. {OKUL_BILGILERI}
-                
-                ÖNEMLİ: Doğrudan cevap vermek (Örn: "Cevap A şıkkıdır") senin görevine aykırıdır. 
-                Senin amacın öğrencinin konuyu kavramasını sağlamaktır.
-                
-                HER SORU İÇİN ŞU ADIMLARI İZLE:
-                1. **Kavramsal Derinlik:** Sorunun temelindeki bilimsel teoriyi anlat. (Örn: Suyun kohezyon kuvveti nedir?)
-                2. **Analitik Rehberlik:** Sorudaki öncülleri analiz et. "Şu veriye bakarsan şunu anlarsın" gibi yönlendirmeler yap.
-                3. **Yanlışları Eletme:** Çeldirici şıkların neden hatalı olduğunu bilimsel olarak açıkla.
-                4. **Sokratik Soru:** Öğrenciye cevabı bulduracak kritik bir soru sor ve cevabı ona bırak.
-                
-                Üslubun: Akademik, profesyonel, teşvik edici ve derinlemesine olmalı.
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Danışmanısın. {OKUL_BILGILERI}
+                TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
+
+                KRİTİK ANALİZ PROTOKOLÜ (SORU SORU ANALİZ):
+                1. GENELLEME YAPMA: Materyaldeki soruları özetleme. Her bir soruyu (Soru 1, Soru 2, Soru 3...) ayrı birer başlık altında incele.
+                2. AKADEMİK DERİNLİK: Cevabı asla doğrudan verme. Sorunun mantığını temel bilimsel yasalarla (polinomiyal açılım, hücre teorisi, termodinamik vb.) açıkla. 
+                3. BAĞLAM YÖNETİMİ: Yüklenen dosyadaki verileri Fen ve Teknoloji Lisesi standartlarında, teknik detayları atlamadan analiz et.
+                4. KURUMSAL ÜSLUP: Profesyonel, teşvik edici ve çözüm odaklı bir dil kullan. Asla "Kütüphaneye bak" gibi yönlendirme metinleri ekleme.
+                5. SOKRATİK YÖNTEM: Her sorunun analizinden sonra öğrenciye cevabı bulduracak kritik bir mantık sorusu sor.
+
+                ANALİZ ŞABLONUN:
+                - SORU [NO]: [KONU BAŞLIĞI]
+                - Kavramsal Mantık: (Bilimsel açıklama)
+                - Çözüm Stratejisi: (Adım adım rehberlik)
+                - Kritik Düşünme Sorusu: (Öğrenciye yönelik etkileşim)
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -105,13 +107,13 @@ if soru:
                         prompt_parts.append(Image.open(dosya))
                     elif dosya.type == "application/pdf":
                         reader = PdfReader(dosya)
-                        pdf_metni = "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+                        pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
                         prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL:\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Analiz Hazır", state="complete")
+                    durum.update(label="✅ Soru Analizleri Hazır", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
