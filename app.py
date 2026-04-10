@@ -35,16 +35,16 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        # ANAYASAL MADDE: Kimlik Başlığı
+        # ANAYASAL MADDE: Kimlik Başlığı (GÜNCELLENDİ VE SABİTLENDİ)
         st.markdown("### **🛡️ Eren AI Education**")
+        st.markdown("**Eren Yapay Zeka Sistemleri**")
         st.success("**Anayasal Mod:** Her soru için bireysel ve derin analiz zorunludur.")
         
-        # ANAYASAL MADDE: Sistem Rehberi
+        # ANAYASAL MADDE: Sistem Rehberi (2 MADDE OLARAK SABİTLENDİ)
         st.markdown("### **📖 Sistem Rehberi**")
         st.info("""
         1. **Akademik dökümanlarınızı veya ödev dosyalarınızı** "Dosya Yükleme" alanından sisteme güvenle iletebilirsiniz.
         2. Analiz edilmesini istediğiniz tüm hususları **metin alanına girerek** Eren AI ile akademik etkileşim başlatabilirsiniz.
-        3. Sisteme iletilen her bir soru, **pedagojik derinlik ilkeleri** uyarınca hiçbir detay atlanmadan, müstakil birer ders modülü olarak analiz edilir.
         """)
         
         st.divider()
@@ -81,24 +81,32 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Her Soruyu Müstakil Olarak Analiz Ediyor...")
+            durum = st.status("🛡️ Eren AI Akademik Analiz Sürecini Yönetiyor...")
             
             try:
-                # --- ANAYASAL VE DENETİMLİ TALİMAT (V24.0) ---
+                # --- ANAYASAL DERİN TALİMAT (V25.0) ---
                 system_instruction = f"""
                 Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
-                Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
+                
+                KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
 
-                🛡️ AKADEMİK ANAYASA (MUTLAK UYGULAMA):
-                - MADDE 1: SORULARI TOPLULAŞTIRMAK KESİNLİKLE YASAKTIR. Materyalde kaç soru varsa, her biri için ayrı bir "## SORU [NO]" başlığı oluşturulmalıdır.
-                - MADDE 2: ANALİZ FORMATI SABİTTİR. Her soru şu üç başlığı içermek zorundadır: 
-                  1. 📚 Kavramsal ve Bilimsel Derinlik
-                  2. 🔍 Analitik İnceleme ve Çözüm Stratejisi
-                  3. 💡 Analitik Sorgulama ve Sentez
-                - MADDE 3: DERİNLİK ZORUNLULUĞU. Her kavramın bilimsel kökenini uzunca açıkla. 
-                - MADDE 4: CEVAP VERMEK YASAKTIR. Doğru şıkkı asla söyleme, öğrenciyi o şıkka bilimsel kanıtlarla yönlendir.
+                🛡️ AKADEMİK ANAYASA (MUTLAK VE SABİT):
+                MADDE 1: HER SORUYA AYRI VE EKSİKSİZ ANALİZ. Dosyadaki veya metindeki her bir soruyu teker teker, başlıklandırarak işle. Asla toplu cevap verme.
+                MADDE 2: MAKSİMUM AKADEMİK DERİNLİK. Her kavramın bilimsel kökenini ve yasasını bir ders notu zenginliğinde anlat.
+                MADDE 3: REHBERLİK İLKESİ. Şıkları analiz et, mantık yollarını göster ama doğrudan cevabı söyleme.
+                MADDE 4: ZORUNLU FORMAT. Her soru için 'Kavramsal Derinlik', 'Analitik İnceleme' ve 'Analitik Sorgulama ve Sentez' başlıklarını kullan.
+                MADDE 5: KURUMSAL KİMLİK. Sol menüdeki Eren AI Education ve Sistem Rehberi ilkelerine bağlı kal.
 
-                Yüklenen dosyada 1'den fazla soru varsa, yanıtın her bir soruyu sırasıyla (Soru 1, Soru 2, Soru 3...) başlıklandırarak ilerlemelidir. Ünite veya konu başlığı altında soruları birleştirme!
+                ANALİZ ŞABLONUN:
+                ## [SORU NO / KONU]
+                ### 📚 Kavramsal ve Bilimsel Derinlik
+                [Derin akademik anlatım]
+                
+                ### 🔍 Analitik İnceleme ve Çözüm Stratejisi
+                [Teknik analiz]
+                
+                ### 💡 Analitik Sorgulama ve Sentez
+                [Sokratik soru]
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -112,7 +120,7 @@ if soru:
                         for page in reader.pages:
                             text = page.extract_text()
                             if text: pdf_metni += text + "\n"
-                        prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL (HER SORUYU TEKER TEKER İNCELE):\n{pdf_metni}")
+                        prompt_parts.append(f"ANALİZ EDİLECEK TÜM SORULAR (TEKER TEKER İNCELE):\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
                 
