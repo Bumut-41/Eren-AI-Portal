@@ -22,6 +22,15 @@ model = genai.GenerativeModel('gemini-3-flash-preview')
 # --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
 OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
 
+# --- DOSYA TEMİZLEME MANTIĞI ---
+# Dosya yükleyicinin her seferinde sıfırlanması için bir counter tutuyoruz
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = 0
+
+def dosya_temizle():
+    st.session_state.uploader_key += 1
+    st.rerun()
+
 def metin_ayikla(dosya):
     try:
         if dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -42,8 +51,8 @@ with st.sidebar:
         st.image("Logo.png", use_container_width=True)
     except:
         st.subheader("🛡️ Eren AI")
-    st.markdown("### **Akademik Portal v16.0**")
-    st.info("Eğitici mod ve Akademik Derinlik Protokolü aktif.")
+    st.markdown("### **Akademik Portal v16.1**")
+    st.info("Akıllı Temizlik: İşlem bittikten sonra dosya alanı sıfırlanır.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
@@ -57,10 +66,13 @@ with chat_area:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ ---
+# --- GİRİŞ PANELİ (ALTTA) ---
 with st.container():
     st.write("---")
-    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v16", label_visibility="collapsed")
+    # Dosya yükleyici her seferinde değişen bir key alıyor, böylece temizlenebiliyor
+    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
+                             key=f"uploader_{st.session_state.uploader_key}", 
+                             label_visibility="collapsed")
     soru = st.chat_input("Mesajınızı buraya yazın...")
 
 # --- AKILLI İŞLEMCİ ---
@@ -75,17 +87,15 @@ if soru:
             durum = st.status("🛡️ Eren AI Analiz Ediyor...")
             
             try:
-                # --- GÜNCELLENMİŞ TALİMAT: YÖNLENDİRME METNİ KALDIRILDI ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve AI Akademik Danışmanısın. {OKUL_BILGILERI}
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Danışmanısın. {OKUL_BILGILERI}
                 
                 ÖNEMLİ KISITLAMA: 
-                Cevaplarının sonunda asla "dijital kütüphaneyi inceleyebilirsin" veya "eren.k12.tr adresindeki kaynaklara bakabilirsin" gibi otomatik yönlendirme cümleleri KULLANMA. Kullanıcı sormadıkça bu web sitesini bir kaynak olarak metin içinde referans verme.
+                Cevapların sonunda asla kütüphane veya web sitesi yönlendirmesi yapma. 
 
                 DERİNLİK VE EĞİTİM PROTOKOLÜ:
-                1. CEVAP VERME, ÖĞRET: Bir soru sorulduğunda doğrudan cevabı söyleme. Konunun bilimsel temellerini, formüllerini ve mantığını katmanlı bir şekilde anlat.
-                2. AKADEMİK DİL: Fen ve Teknoloji Lisesi seviyesinde teknik, analitik ve derinlemesine açıklamalar yap.
-                3. DOSYA ANALİZİ: Yüklenen dosya içeriğini bu derinlik filtresinden geçirerek, öğrenciye rehberlik edecek şekilde yorumla.
+                1. CEVAP VERME, ÖĞRET: Konunun bilimsel temellerini ve mantığını derinlemesine anlat.
+                2. AKADEMİK DİL: Teknik ve analitik açıklamalar yap.
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -113,6 +123,12 @@ if soru:
                     durum.update(label="✅ Hazır", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    
+                    # --- DOSYAYI SİLDİRME TETİKLEYİCİSİ ---
+                    # İşlem bittiğinde dosya kutusunu sıfırlamak için counter'ı artırıyoruz
+                    if dosya:
+                        st.session_state.uploader_key += 1
+                        st.rerun() # Sayfayı yenileyerek kutuyu boşaltır
                     
             except Exception as e:
                 durum.update(label="❌ Hata", state="error")
