@@ -36,13 +36,13 @@ def sidebar_ciz():
         
         st.markdown("---")
         st.markdown("### **Akademik Rehberlik Portalı**")
-        st.success("**Eğitici Mod:** Analitik düşünme ve derinlemesine öğrenme odaklı yaklaşım.")
+        st.success("**Eren AI Education Software")
         
         st.info("""
         **Kullanım Rehberi:**
         1. İlgili akademik materyalinizi veya ödev dosyanızı yükleyiniz.
         2. Analiz edilmesini istediğiniz konuyu aşağıya belirtiniz.
-        3. Eren AI, Sokratik yöntemle kavramsal derinlik sağlayacaktır.
+       
         """)
         
         st.divider()
@@ -68,7 +68,7 @@ with st.container():
                              label_visibility="collapsed")
     
     # Metin alanını daha kurumsal bir hitabetle güncelledik
-    soru = st.chat_input("Akademik danışmanınıza sormak istediğiniz konuyu veya sorunuzu buraya giriniz...")
+    soru = st.chat_input("Eren AI'a sormak istediğiniz konuyu veya sorunuzu buraya giriniz...")
 
 # --- AKADEMİK İŞLEMCİ ---
 if soru:
