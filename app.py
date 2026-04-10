@@ -26,7 +26,7 @@ OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SOL MENÜ ---
+# --- SOL MENÜ (EKRAN GÖRÜNTÜSÜNE GÖRE BİREBİR GÜNCEL) ---
 def sidebar_ciz():
     with st.sidebar:
         try:
@@ -35,18 +35,19 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **Akademik Rehberlik Portalı**")
-        st.success("**Eren AI Education Software")
+        st.markdown("### **🛡️ Akademik Rehber v17.8**")
+        st.success("**Eğitici Mod Aktif:** Her soru bir ders niteliğindedir.")
         
+        # Ekran görüntüsündeki metin yapısı
         st.info("""
-        **Kullanım Rehberi:**
-        1. İlgili akademik materyalinizi veya ödev dosyanızı yükleyiniz.
-        2. Analiz edilmesini istediğiniz konuyu aşağıya belirtiniz.
-       
+        **Nasıl Kullanılır?**
+        1. Ödev dosyanı aşağıdan yükle.
+        2. Sorularını sor.
+        3. Eren AI her soruyu derinlemesine analiz etsin.
         """)
         
         st.divider()
-        st.caption("© 2026 Eren Eğitim Kurumları | Bilgi Güçtür.")
+        st.caption("© 2026 Eren Eğitim Kurumları")
 
 sidebar_ciz()
 
@@ -60,15 +61,14 @@ with chat_area:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ (KURUMSAL GÜNCELLEME) ---
+# --- GİRİŞ PANELİ ---
 with st.container():
     st.write("---")
-    dosya = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
+    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
     
-    # Metin alanını daha kurumsal bir hitabetle güncelledik
-    soru = st.chat_input("Eren AI'a sormak istediğiniz konuyu veya sorunuzu buraya giriniz...")
+    soru = st.chat_input("Akademik danışmanınıza sormak istediğiniz konuyu veya sorunuzu buraya giriniz...")
 
 # --- AKADEMİK İŞLEMCİ ---
 if soru:
@@ -82,10 +82,20 @@ if soru:
             durum = st.status("🛡️ Eren AI Akademik Değerlendirme Yapıyor...")
             
             try:
+                # --- KATIDAKİ EĞİTİCİ TALİMAT (CEVAP VERMEK YASAKLANDI) ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Rehberisin. {OKUL_BILGILERI}
-                GÖREVİN: Öğrencinin yüklediği materyaldeki HER BİR SORUYU ayrı ayrı başlıklandırarak derinlemesine öğretmek.
-                ... (Daha önceki detaylı talimatlar aynen korunur) ...
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin Baş Akademik Rehberisin. {OKUL_BILGILERI}
+                
+                ÖNEMLİ: Doğrudan cevap vermek (Örn: "Cevap A şıkkıdır") senin görevine aykırıdır. 
+                Senin amacın öğrencinin konuyu kavramasını sağlamaktır.
+                
+                HER SORU İÇİN ŞU ADIMLARI İZLE:
+                1. **Kavramsal Derinlik:** Sorunun temelindeki bilimsel teoriyi anlat. (Örn: Suyun kohezyon kuvveti nedir?)
+                2. **Analitik Rehberlik:** Sorudaki öncülleri analiz et. "Şu veriye bakarsan şunu anlarsın" gibi yönlendirmeler yap.
+                3. **Yanlışları Eletme:** Çeldirici şıkların neden hatalı olduğunu bilimsel olarak açıkla.
+                4. **Sokratik Soru:** Öğrenciye cevabı bulduracak kritik bir soru sor ve cevabı ona bırak.
+                
+                Üslubun: Akademik, profesyonel, teşvik edici ve derinlemesine olmalı.
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -95,7 +105,7 @@ if soru:
                         prompt_parts.append(Image.open(dosya))
                     elif dosya.type == "application/pdf":
                         reader = PdfReader(dosya)
-                        pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                        pdf_metni = "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
                         prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL:\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
