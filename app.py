@@ -22,14 +22,9 @@ model = genai.GenerativeModel('gemini-3-flash-preview')
 # --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
 OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
 
-# --- DOSYA TEMİZLEME MANTIĞI ---
-# Dosya yükleyicinin her seferinde sıfırlanması için bir counter tutuyoruz
+# --- DOSYA TEMİZLEME VE SIFIRLAMA ---
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
-
-def dosya_temizle():
-    st.session_state.uploader_key += 1
-    st.rerun()
 
 def metin_ayikla(dosya):
     try:
@@ -51,8 +46,8 @@ with st.sidebar:
         st.image("Logo.png", use_container_width=True)
     except:
         st.subheader("🛡️ Eren AI")
-    st.markdown("### **Akademik Portal v16.1**")
-    st.info("Akıllı Temizlik: İşlem bittikten sonra dosya alanı sıfırlanır.")
+    st.markdown("### **Akademik Portal v16.2**")
+    st.info("Tam Analiz Modu: Konu anlatımı + Adım adım tüm soruların çözümü.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
@@ -66,14 +61,13 @@ with chat_area:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ (ALTTA) ---
+# --- GİRİŞ PANELİ (ALTTA SABİT) ---
 with st.container():
     st.write("---")
-    # Dosya yükleyici her seferinde değişen bir key alıyor, böylece temizlenebiliyor
     dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
-    soru = st.chat_input("Mesajınızı buraya yazın...")
+    soru = st.chat_input("Tüm soruları analiz et ve çözümlerini anlat...")
 
 # --- AKILLI İŞLEMCİ ---
 if soru:
@@ -84,51 +78,43 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Analiz Ediyor...")
+            durum = st.status("🛡️ Eren AI Soruları Çözüyor...")
             
             try:
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve AI Akademik Danışmanısın. {OKUL_BILGILERI}
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin "Baş Akademik Danışmanısın". {OKUL_BILGILERI}
                 
-                ÖNEMLİ KISITLAMA: 
-                Cevapların sonunda asla kütüphane veya web sitesi yönlendirmesi yapma. 
-
-                DERİNLİK VE EĞİTİM PROTOKOLÜ:
-                1. CEVAP VERME, ÖĞRET: Konunun bilimsel temellerini ve mantığını derinlemesine anlat.
-                2. AKADEMİK DİL: Teknik ve analitik açıklamalar yap.
+                GÖREVİN: 
+                1. EKSİKSİZ ÇÖZÜM: Yüklenen dosyadaki TÜM soruları tek tek tespit et ve hiçbirini atlamadan çöz.
+                2. ÖĞRETİCİ ANALİZ: Her sorunun çözümünden önce, o soruda kullanılan matematiksel kuralı (Örn: İki kare farkı, basamak analizi vb.) derinlemesine açıkla.
+                3. ADIM ADIM İŞLEM: Çözümleri sadece sonuç olarak değil, işlem basamaklarıyla göster.
+                4. KISITLAMA: Cevap sonuna web sitesi veya kütüphane yönlendirmesi ekleme.
                 """
                 
                 prompt_parts = [system_instruction, soru]
                 
                 if dosya:
-                    analiz_kelimeleri = ["dosya", "belge", "doküman", "özet", "listele", "tablo", "analiz", "oku", "yüklediğim", "quiz", "soru", "ödev"]
-                    if any(kelime in soru.lower() for kelime in analiz_kelimeleri):
-                        if dosya.type.startswith("image/"):
-                            prompt_parts.append(Image.open(dosya))
-                        elif dosya.type == "application/pdf":
-                            reader = PdfReader(dosya)
-                            pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                            if len(pdf_metni.strip()) > 50:
-                                prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{pdf_metni}")
-                            else:
-                                dosya.seek(0)
-                                prompt_parts.extend(pdf2image.convert_from_bytes(dosya.read())[:5])
-                        else:
-                            ek_metin = metin_ayikla(dosya)
-                            if ek_metin: prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{ek_metin}")
+                    if dosya.type.startswith("image/"):
+                        prompt_parts.append(Image.open(dosya))
+                    elif dosya.type == "application/pdf":
+                        reader = PdfReader(dosya)
+                        pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                        prompt_parts.append(f"DOSYA İÇERİĞİ:\n{pdf_metni}")
+                    else:
+                        ek_metin = metin_ayikla(dosya)
+                        if ek_metin: prompt_parts.append(f"DOSYA İÇERİĞİ:\n{ek_metin}")
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Hazır", state="complete")
+                    durum.update(label="✅ Çözümler Hazır", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
-                    # --- DOSYAYI SİLDİRME TETİKLEYİCİSİ ---
-                    # İşlem bittiğinde dosya kutusunu sıfırlamak için counter'ı artırıyoruz
+                    # İşlem bittiğinde dosya alanını temizlemek için counter'ı artırıyoruz
                     if dosya:
                         st.session_state.uploader_key += 1
-                        st.rerun() # Sayfayı yenileyerek kutuyu boşaltır
+                        st.rerun() 
                     
             except Exception as e:
                 durum.update(label="❌ Hata", state="error")
