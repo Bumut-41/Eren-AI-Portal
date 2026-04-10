@@ -26,7 +26,7 @@ OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SOL MENÜ (KURUMSAL VE SABİT) ---
+# --- SOL MENÜ (ANAYASAL VE SABİT) ---
 def sidebar_ciz():
     with st.sidebar:
         try:
@@ -35,14 +35,16 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **🛡️ Akademik Rehber v21.0**")
+        # ANAYASAL MADDE: Kimlik Başlığı
+        st.markdown("### **🛡️ Eren AI Education**")
         st.success("**Anayasal Mod:** Her soru için bireysel ve derin analiz zorunludur.")
         
+        # ANAYASAL MADDE: Sistem Rehberi (Güncel ve Kurumsal)
+        st.markdown("### **📖 Sistem Rehberi**")
         st.info("""
-        **Sistem İlkeleri:**
-        1. Hiçbir soru atlanmaz.
-        2. Her soru bir "mikro-ders" olarak işlenir.
-        3. Doğrudan cevap verilmez, konu öğretilir.
+        1. **Akademik dökümanlarınızı veya ödev dosyalarınızı** "Dosya Yükleme" alanından sisteme güvenle iletebilirsiniz.
+        2. Analiz edilmesini istediğiniz tüm hususları **metin alanına girerek** Eren AI ile akademik etkileşim başlatabilirsiniz.
+        3. Sisteme iletilen her bir soru, **pedagojik derinlik ilkeleri** uyarınca hiçbir detay atlanmadan, müstakil birer ders modülü olarak analiz edilir.
         """)
         
         st.divider()
@@ -67,6 +69,7 @@ with st.container():
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
     
+    # ANAYASAL GİRİŞ METNİ
     soru = st.chat_input("Eren AI'a sormak istediğin soruyu bu alana girebilirsiniz.")
 
 # --- AKADEMİK İŞLEMCİ ---
@@ -78,32 +81,33 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Akademik Müfredat Analizi Yapıyor...")
+            durum = st.status("🛡️ Eren AI Akademik Müfredat Analizini Yürütüyor...")
             
             try:
-                # --- SİSTEMİN ANAYASASI VE DERİN TALİMATI ---
+                # --- ANAYASAL DERİN TALİMAT (V23.0) ---
                 system_instruction = f"""
                 Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
                 
                 KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
 
-                🛡️ AKADEMİK ANAYASA (DEĞİŞTİRİLEMEZ MADDELER):
-                MADDE 1: MATERYALDEKİ TÜM SORULARI EKSİKSİZ ANALİZ ET. Hiçbir soruyu atlama, özetleme veya geçiştirme.
-                MADDE 2: HER SORUYA AYRI BAŞLIK AÇ. Karma anlatım yapma, her soru bir "mikro-ders" modülüdür.
-                MADDE 3: DERİN KAVRAMSAL ANLATIM ZORUNLUDUR. Sadece çözüm yolu gösterme; konunun bilimsel arka planını, yasalarını ve akademik önemini genişçe anlat.
-                MADDE 4: CEVAP VERMEK YASAKTIR. Şıkları analiz et ama doğru seçeneği söyleme; öğrenciyi oraya akademik çıkarımlarla ulaştır.
-                MADDE 5: SOKRATİK ETKİLEŞİM. Her soru sonunda, o sorunun mantığını test eden bir karşı soru sor.
+                🛡️ AKADEMİK ANAYASA (SABİT VE DEĞİŞTİRİLEMEZ):
+                MADDE 1: MATERYALDEKİ TÜM SORULARI TEKER TEKER ANALİZ ET. Hiçbir soruyu atlama, toplu cevap verme.
+                MADDE 2: MAKSİMUM AKADEMİK DERİNLİK. Konuyu bir ders kitabı zenginliğinde, bilimsel terminolojiye sadık kalarak genişçe anlat.
+                MADDE 3: REHBERLİK İLKESİ. Şıkları analiz et, mantık yollarını göster ama doğrudan doğru şıkkı söyleme.
+                MADDE 4: SİSTEMATİK ANALİZ FORMATI. Her soru için aşağıdaki üçlü başlık yapısını kullan.
+                MADDE 5: KURUMSAL ÜSLUP. Profesyonel, teşvik edici ve eren.k12.tr vizyonuna uygun bir dil kullan.
 
-                ANALİZ DÜZENİN:
-                ## [SORU NO VE KONU]
-                ### 📚 Akademik ve Bilimsel Temeller
-                [Konunun teorik, ansiklopedik ve fen lisesi düzeyindeki derin anlatımı.]
+                ZORUNLU ANALİZ ŞABLONUN:
+                ## [SORU NO / KONU BAŞLIĞI]
                 
-                ### 🔍 Analitik Çözümleme ve Strateji
-                [Soru verilerinin, öncüllerinin ve şıklarının teknik analizi.]
+                ### 📚 Kavramsal ve Bilimsel Derinlik
+                [Burada konuyu en ince ayrıntısına kadar, akademik bir dille öğret.]
                 
-                ### 💡 Sokratik Düşünme Köprüsü
-                [Öğrenciye yönelik, bilgiyi pekiştirici derin soru.]
+                ### 🔍 Analitik İnceleme ve Çözüm Stratejisi
+                [Soru verilerini ve seçenekleri bilimsel bir süzgeçten geçirerek analiz et.]
+                
+                ### 💡 Analitik Sorgulama ve Sentez
+                [Öğrencinin konuyu içselleştirmesini sağlayacak, çıkarım odaklı Sokratik soru.]
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -117,12 +121,12 @@ if soru:
                         for page in reader.pages:
                             text = page.extract_text()
                             if text: pdf_metni += text + "\n"
-                        prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL:\n{pdf_metni}")
+                        prompt_parts.append(f"ANALİZ EDİLECEK TÜM SORULAR:\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Anayasal Akademik Analiz Tamamlandı", state="complete")
+                    durum.update(label="✅ Anayasal Analiz Tamamlandı", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
@@ -132,4 +136,4 @@ if soru:
                     
             except Exception as e:
                 durum.update(label="❌ Hata", state="error")
-                st.error(f"Sistem hatası: {str(e)}")
+                st.error(f"Teknik bir aksaklık oluştu: {str(e)}")
