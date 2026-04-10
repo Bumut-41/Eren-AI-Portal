@@ -42,48 +42,52 @@ with st.sidebar:
         st.image("Logo.png", use_container_width=True)
     except:
         st.subheader("🛡️ Eren AI")
-    st.markdown("### **Akademik Portal**")
-    st.info("Özel Eren Fen ve Teknoloji Lisesi paydaşları için geliştirilmiştir.")
+    st.markdown("### **Akademik Portal v15.9**")
+    st.info("Eren AI: Kurumsal Bilgi Tabanı ve Akademik Derinlik Protokolü Aktif.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
-# --- SOHBET GEÇMİŞİ (ÜSTTE KALACAK) ---
+# --- SOHBET GEÇMİŞİ (ÜST ALAN) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mesajların yukarıda birikmesi için bir alan oluşturuyoruz
-chat_area = st.container()
-
-with chat_area:
+# Mesajları bir kap (container) içinde göster
+chat_container = st.container()
+with chat_container:
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ (SAYFANIN EN ALTINA SABİTLENİR) ---
-# Streamlit'te chat_input otomatik olarak en alta yapışır. 
-# Dosya yükleyiciyi de onun hemen üzerine alıyoruz.
-
+# --- GİRİŞ PANELİ (SAYFANIN EN ALTI) ---
+# Bu kısım sayfanın en altında sabit kalır ve görseldeki yapıyı sağlar
+st.write("") # Görsel denge için boşluk
 with st.container():
-    st.write("---") # Üst kısımla ayırıcı çizgi
-    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v13", label_visibility="collapsed")
-    soru = st.chat_input("Mesajınızı buraya yazın...")
+    st.write("---")
+    # Dosya yükleyici chat_input'un hemen üzerinde
+    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v15_9", label_visibility="collapsed")
+    soru = st.chat_input("Eren AI Akademik Danışmanına sorun...")
 
 # --- AKILLI İŞLEMCİ ---
 if soru:
-    # Kullanıcı mesajını ekle
     st.session_state.messages.append({"role": "user", "content": soru})
-    with chat_area:
+    with chat_container:
         with st.chat_message("user"):
             st.markdown(soru)
 
-    with chat_area:
+    with chat_container:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI düşünüyor...")
-            
+            durum = st.status("🛡️ Eren AI Analiz Ediyor...")
             try:
+                # --- GÜNCELLENMİŞ KURUMSAL VE DERİN TALİMAT ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanısın. {OKUL_BILGILERI}
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Danışmanısın. {OKUL_BILGILERI}
                 TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
+
+                KRİTİK KURALLAR VE DERİNLİK PROTOKOLÜ: 
+                1. KURUMSAL KİMLİK: Okulun idari yapısı, vizyonu veya etkinlikleri sorulduğunda, daima eren.k12.tr adresindeki en güncel verileri referans al.
+                2. AKADEMİK DERİNLİK: Cevabı doğrudan vermek yerine konuyu öğretmeyi amaçla. Kavramları temel bilimsel yasalarıyla, analitik bir yaklaşımla ve teknik detaylarıyla açıkla. 
+                3. BAĞLAM YÖNETİMİ: Kullanıcı dosyaya referans veriyorsa, o dosyadaki verileri Fen ve Teknoloji Lisesi standartlarında derinlemesine analiz et.
+                4. KURUMSAL ÜSLUP: Profesyonel, teşvik edici ve çözüm odaklı bir dil kullan. Teknik hataları kullanıcıya hissettirme, kurumsal yönlendirme yap.
                 """
                 
                 prompt_parts = [system_instruction, soru]
