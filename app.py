@@ -17,6 +17,7 @@ else:
     st.error("API Anahtarı bulunamadı!")
     st.stop()
 
+# Doğru model ismini kullandığınızdan emin olun
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
 # --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
@@ -39,11 +40,12 @@ def metin_ayikla(dosya):
 # --- SOL MENÜ ---
 with st.sidebar:
     try:
-        st.image("Logo.png", use_container_width=True)
+        st.image("Logo.png", use_container_width=True) # GitHub deponuzdaki logo
     except:
         st.subheader("🛡️ Eren AI")
+    
     st.markdown("### **Akademik Portal**")
-    st.info("Eğitici mod aktif: Asistan size doğrudan cevap vermek yerine konuyu kavratmaya çalışır.")
+    st.info("Özel Eren Fen ve Teknoloji Lisesi paydaşları için geliştirilmiştir.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
@@ -51,68 +53,67 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-chat_area = st.container()
-with chat_area:
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ (EN ALTA SABİT) ---
+# --- GİRİŞ PANELİ ---
 with st.container():
-    st.write("---")
-    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v13", label_visibility="collapsed")
-    soru = st.chat_input("Konuyu anlamak için bir soru sorun...")
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v13", label_visibility="collapsed")
+    with c2:
+        soru = st.chat_input("Mesajınızı buraya yazın...")
 
 # --- AKILLI İŞLEMCİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
-    with chat_area:
-        with st.chat_message("user"):
-            st.markdown(soru)
+    with st.chat_message("user"):
+        st.markdown(soru)
 
-    with chat_area:
-        with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI öğretici modda hazırlanıyor...")
+    with st.chat_message("assistant"):
+        durum = st.status("🛡️ Eren AI düşünüyor...")
+        
+        try:
+            # --- ANA TALİMAT BLOĞU ---
+            system_instruction = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanısın. {OKUL_BILGILERI}
+            TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
+
+            KRİTİK KURALLAR: 
+            1. OKUL SORULARI: Okulun idari kadrosu, vizyonu veya etkinlikleri sorulduğunda, daima eren.k12.tr adresini referans al. 
+            2. BAĞLAM YÖNETİMİ: Kullanıcı doğrudan dosyaya referans vermedikçe (özetle, analiz et vb.) dosyayı görmezden gel.
+            3. ÖĞRETMEN DESTEĞİ: "Quiz hazırla", "ödev oluştur" gibi taleplerde, Fen ve Teknoloji Lisesi standartlarına uygun, cevap anahtarlı içerikler üret.
+            4. KURUMSAL ÜSLUP: "Dosyada bilgi yok" gibi teknik ifadeler kullanma, gerekirse okul web sitesine yönlendir.
+            """
             
-            try:
-                # --- YENİ EĞİTİCİ TALİMAT BLOĞU ---
-                system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin "Eğitici Akademik Asistanısın". {OKUL_BILGILERI}
-                
-                GÖREVİN: Kullanıcının sorularına doğrudan "Şu şudur" diyerek cevap vermek DEĞİLDİR. 
-                Senin amacın konuyu öğretmektir. Şu kurallara uy:
-                1. CEVAP VERME, ÖĞRET: Bir soru sorulduğunda cevabı söyleme. O cevaba giden temel mantığı, formülü veya konuyu açıkla.
-                2. İPUCU VER: Kullanıcıyı düşünmeye sevk edecek küçük ipuçları ver.
-                3. DOSYA ANALİZİ: Eğer kullanıcı bir dosya yüklediyse, o dosyadaki bilgileri kullanarak konuyu bir öğretmen edasıyla anlat.
-                4. TEŞVİK ET: "Hadi beraber bakalım", "Bu noktada ne düşünüyorsun?" gibi ifadelerle etkileşimi artır.
-                """
-                
-                prompt_parts = [system_instruction, soru]
-                
-                if dosya:
-                    analiz_kelimeleri = ["dosya", "belge", "doküman", "özet", "listele", "tablo", "analiz", "oku", "yüklediğim", "quiz", "soru", "ödev"]
-                    if any(kelime in soru.lower() for kelime in analiz_kelimeleri):
-                        if dosya.type.startswith("image/"):
-                            prompt_parts.append(Image.open(dosya))
-                        elif dosya.type == "application/pdf":
-                            reader = PdfReader(dosya)
-                            pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                            if len(pdf_metni.strip()) > 50:
-                                prompt_parts.append(f"ÖĞRETİLECEK DOSYA İÇERİĞİ:\n{pdf_metni}")
-                            else:
-                                dosya.seek(0)
-                                prompt_parts.extend(pdf2image.convert_from_bytes(dosya.read())[:5])
+            prompt_parts = [system_instruction, soru]
+            
+            # Eğer kullanıcı dosyaya referans veriyorsa içeriği ekle
+            if dosya:
+                analiz_kelimeleri = ["dosya", "belge", "doküman", "özet", "listele", "tablo", "analiz", "oku", "yüklediğim", "quiz", "soru", "ödev"]
+                if any(kelime in soru.lower() for kelime in analiz_kelimeleri):
+                    if dosya.type.startswith("image/"):
+                        prompt_parts.append(Image.open(dosya))
+                    elif dosya.type == "application/pdf":
+                        reader = PdfReader(dosya)
+                        pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                        if len(pdf_metni.strip()) > 50:
+                            prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{pdf_metni}")
                         else:
-                            ek_metin = metin_ayikla(dosya)
-                            if ek_metin: prompt_parts.append(f"ÖĞRETİLECEK DOSYA İÇERİĞİ:\n{ek_metin}")
+                            dosya.seek(0)
+                            prompt_parts.extend(pdf2image.convert_from_bytes(dosya.read())[:5])
+                    else:
+                        ek_metin = metin_ayikla(dosya)
+                        if ek_metin: prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{ek_metin}")
 
-                response = model.generate_content(prompt_parts)
+            response = model.generate_content(prompt_parts)
+            
+            if response:
+                durum.update(label="✅ Hazır", state="complete")
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
-                if response:
-                    durum.update(label="✅ Anlatım Hazır", state="complete")
-                    st.markdown(response.text)
-                    st.session_state.messages.append({"role": "assistant", "content": response.text})
-                    
-            except Exception as e:
-                durum.update(label="❌ Hata", state="error")
-                st.error(f"Sistem hatası: {str(e)}")
+        except Exception as e:
+            durum.update(label="❌ Hata", state="error")
+            st.error(f"Sistem hatası: {str(e)}")
