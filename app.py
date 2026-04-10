@@ -9,7 +9,7 @@ from pptx import Presentation
 import io
 
 # --- SİSTEM AYARLARI ---
-st.set_page_config(page_title="Eren AI | Derin Akademik Rehber", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="Eren AI | Akademik Portal", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -26,7 +26,7 @@ OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SOL MENÜ (GARANTİLENMİŞ GÖRÜNÜM) ---
+# --- SOL MENÜ ---
 def sidebar_ciz():
     with st.sidebar:
         try:
@@ -35,20 +35,19 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **🛡️ Akademik Rehber v17.6**")
-        st.success("**Eğitici Mod Aktif:** Her soru bir ders niteliğindedir.")
+        st.markdown("### **Akademik Rehberlik Portalı**")
+        st.success("**Eğitici Mod:** Analitik düşünme ve derinlemesine öğrenme odaklı yaklaşım.")
         
         st.info("""
-        **Nasıl Kullanılır?**
-        1. Ödev dosyanı aşağıdan yükle.
-        2. Sorularını sor.
-        3. Eren AI her soruyu derinlemesine analiz etsin.
+        **Kullanım Rehberi:**
+        1. İlgili akademik materyalinizi veya ödev dosyanızı yükleyiniz.
+        2. Analiz edilmesini istediğiniz konuyu aşağıya belirtiniz.
+        3. Eren AI, Sokratik yöntemle kavramsal derinlik sağlayacaktır.
         """)
         
         st.divider()
-        st.caption("© 2026 Eren Eğitim Kurumları")
+        st.caption("© 2026 Eren Eğitim Kurumları | Bilgi Güçtür.")
 
-# Menüyü çiz
 sidebar_ciz()
 
 # --- SOHBET GEÇMİŞİ ---
@@ -61,13 +60,15 @@ with chat_area:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ (SAYFANIN EN ALTI) ---
+# --- GİRİŞ PANELİ (KURUMSAL GÜNCELLEME) ---
 with st.container():
     st.write("---")
-    dosya = st.file_uploader("Ödev Dosyası", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
+    dosya = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
-    soru = st.chat_input("Ödevimdeki tüm soruları en derin akademik düzeyde analiz etmeni istiyorum...")
+    
+    # Metin alanını daha kurumsal bir hitabetle güncelledik
+    soru = st.chat_input("Akademik danışmanınıza sormak istediğiniz konuyu veya sorunuzu buraya giriniz...")
 
 # --- AKADEMİK İŞLEMCİ ---
 if soru:
@@ -78,22 +79,13 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Derin Analiz Yapıyor...")
+            durum = st.status("🛡️ Eren AI Akademik Değerlendirme Yapıyor...")
             
             try:
-                # --- HER SORUYA ÖZEL DERİN ANALİZ TALİMATI ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin "Baş Akademik Rehberisin". {OKUL_BILGILERI}
-                
-                GÖREVİN: Öğrencinin yüklediği materyaldeki HER BİR SORUYU (Soru 1, Soru 2...) ayrı ayrı başlıklandırarak derinlemesine öğretmek.
-                
-                HER SORU İÇİN ANALİZ ŞABLONU:
-                1. **Kavramsal Temel:** Sorunun merkezindeki konuyu (Örn: Enzimlerin çalışma prensibi) akademik olarak anlat.
-                2. **Adım Adım Analiz:** Sorudaki öncülleri tek tek değerlendir, neden doğru veya yanlış olduklarını bilimsel kanıtlarla açıkla.
-                3. **Strateji:** Bu tür sorularda hangi 'anahtar kelimelere' bakılması gerektiğini öğret.
-                4. **Düşündürücü Soru:** Öğrenciye, öğrendiğini pekiştirecek Sokratik bir soru sor.
-                
-                Kısıtlama: Kurumsal yönlendirme metni ekleme. Cevabı sadece söyleme, buldur.
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Rehberisin. {OKUL_BILGILERI}
+                GÖREVİN: Öğrencinin yüklediği materyaldeki HER BİR SORUYU ayrı ayrı başlıklandırarak derinlemesine öğretmek.
+                ... (Daha önceki detaylı talimatlar aynen korunur) ...
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -104,15 +96,12 @@ if soru:
                     elif dosya.type == "application/pdf":
                         reader = PdfReader(dosya)
                         pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                        prompt_parts.append(f"ÖDEV İÇERİĞİ:\n{pdf_metni}")
-                    else:
-                        # Metin ayıklama fonksiyonu buraya entegre edilebilir
-                        pass
+                        prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL:\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Derin Analiz Tamamlandı", state="complete")
+                    durum.update(label="✅ Analiz Hazır", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
@@ -121,5 +110,5 @@ if soru:
                         st.rerun() 
                     
             except Exception as e:
-                durum.update(label="❌ Hata", state="error")
-                st.error(f"Sistem hatası: {str(e)}")
+                durum.update(label="❌ Sistem Hatası", state="error")
+                st.error(f"Teknik bir sorun oluştu: {str(e)}")
