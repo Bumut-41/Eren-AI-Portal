@@ -39,7 +39,7 @@ def sidebar_ciz():
         st.markdown("### **🛡️ Eren AI Education**")
         st.success("**Anayasal Mod:** Her soru için bireysel ve derin analiz zorunludur.")
         
-        # ANAYASAL MADDE: Sistem Rehberi (Güncel ve Kurumsal)
+        # ANAYASAL MADDE: Sistem Rehberi
         st.markdown("### **📖 Sistem Rehberi**")
         st.info("""
         1. **Akademik dökümanlarınızı veya ödev dosyalarınızı** "Dosya Yükleme" alanından sisteme güvenle iletebilirsiniz.
@@ -81,33 +81,24 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Akademik Müfredat Analizini Yürütüyor...")
+            durum = st.status("🛡️ Eren AI Her Soruyu Müstakil Olarak Analiz Ediyor...")
             
             try:
-                # --- ANAYASAL DERİN TALİMAT (V23.0) ---
+                # --- ANAYASAL VE DENETİMLİ TALİMAT (V24.0) ---
                 system_instruction = f"""
                 Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
-                
-                KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
+                Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
 
-                🛡️ AKADEMİK ANAYASA (SABİT VE DEĞİŞTİRİLEMEZ):
-                MADDE 1: MATERYALDEKİ TÜM SORULARI TEKER TEKER ANALİZ ET. Hiçbir soruyu atlama, toplu cevap verme.
-                MADDE 2: MAKSİMUM AKADEMİK DERİNLİK. Konuyu bir ders kitabı zenginliğinde, bilimsel terminolojiye sadık kalarak genişçe anlat.
-                MADDE 3: REHBERLİK İLKESİ. Şıkları analiz et, mantık yollarını göster ama doğrudan doğru şıkkı söyleme.
-                MADDE 4: SİSTEMATİK ANALİZ FORMATI. Her soru için aşağıdaki üçlü başlık yapısını kullan.
-                MADDE 5: KURUMSAL ÜSLUP. Profesyonel, teşvik edici ve eren.k12.tr vizyonuna uygun bir dil kullan.
+                🛡️ AKADEMİK ANAYASA (MUTLAK UYGULAMA):
+                - MADDE 1: SORULARI TOPLULAŞTIRMAK KESİNLİKLE YASAKTIR. Materyalde kaç soru varsa, her biri için ayrı bir "## SORU [NO]" başlığı oluşturulmalıdır.
+                - MADDE 2: ANALİZ FORMATI SABİTTİR. Her soru şu üç başlığı içermek zorundadır: 
+                  1. 📚 Kavramsal ve Bilimsel Derinlik
+                  2. 🔍 Analitik İnceleme ve Çözüm Stratejisi
+                  3. 💡 Analitik Sorgulama ve Sentez
+                - MADDE 3: DERİNLİK ZORUNLULUĞU. Her kavramın bilimsel kökenini uzunca açıkla. 
+                - MADDE 4: CEVAP VERMEK YASAKTIR. Doğru şıkkı asla söyleme, öğrenciyi o şıkka bilimsel kanıtlarla yönlendir.
 
-                ZORUNLU ANALİZ ŞABLONUN:
-                ## [SORU NO / KONU BAŞLIĞI]
-                
-                ### 📚 Kavramsal ve Bilimsel Derinlik
-                [Burada konuyu en ince ayrıntısına kadar, akademik bir dille öğret.]
-                
-                ### 🔍 Analitik İnceleme ve Çözüm Stratejisi
-                [Soru verilerini ve seçenekleri bilimsel bir süzgeçten geçirerek analiz et.]
-                
-                ### 💡 Analitik Sorgulama ve Sentez
-                [Öğrencinin konuyu içselleştirmesini sağlayacak, çıkarım odaklı Sokratik soru.]
+                Yüklenen dosyada 1'den fazla soru varsa, yanıtın her bir soruyu sırasıyla (Soru 1, Soru 2, Soru 3...) başlıklandırarak ilerlemelidir. Ünite veya konu başlığı altında soruları birleştirme!
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -121,7 +112,7 @@ if soru:
                         for page in reader.pages:
                             text = page.extract_text()
                             if text: pdf_metni += text + "\n"
-                        prompt_parts.append(f"ANALİZ EDİLECEK TÜM SORULAR:\n{pdf_metni}")
+                        prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL (HER SORUYU TEKER TEKER İNCELE):\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
                 
