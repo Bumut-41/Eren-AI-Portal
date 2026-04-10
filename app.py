@@ -2,96 +2,118 @@ import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
 from PIL import Image
+import pdf2image
+import pandas as pd
+from docx import Document
 from pptx import Presentation
 import io
-import re
 
-# --- AYARLAR ---
-st.set_page_config(page_title="Eren AI | Kurumsal", layout="wide")
+# --- SİSTEM AYARLARI ---
+st.set_page_config(page_title="Eren AI | Akademik Portal", page_icon="🛡️", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Key eksik!")
+    st.error("API Anahtarı bulunamadı!")
     st.stop()
 
+# Doğru model ismini kullandığınızdan emin olun
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- ŞABLON TEMİZLEME MOTORU ---
-def sunum_hazirla(icerik):
+# --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
+OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
+
+def metin_ayikla(dosya):
     try:
-        prs = Presentation("template.pptx")
-        # Şablonu tamamen boşalt (Eski uçak resimlerini ve latin metinlerini siler)
-        while len(prs.slides) > 0:
-            rId = prs.slides._sldIdLst[0].rId
-            prs.part.drop_rel(rId)
-            del prs.slides._sldIdLst[0]
+        if dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            return "\n".join([p.text for p in Document(dosya).paragraphs])
+        elif "spreadsheet" in dosya.type or "csv" in dosya.type:
+            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
+            return f"TABLO VERİSİ:\n{df.to_string()}"
+        elif "presentationml" in dosya.type:
+            prs = Presentation(dosya)
+            return "\n".join([shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text")])
+        return None
+    except Exception as e:
+        return f"Dosya Okuma Hatası: {e}"
+
+# --- SOL MENÜ ---
+with st.sidebar:
+    try:
+        st.image("Logo.png", use_container_width=True) # GitHub deponuzdaki logo
     except:
-        prs = Presentation()
+        st.subheader("🛡️ Eren AI")
+    
+    st.markdown("### **Akademik Portal**")
+    st.info("Özel Eren Fen ve Teknoloji Lisesi paydaşları için geliştirilmiştir.")
+    st.divider()
+    st.caption("© 2026 Eren Eğitim Kurumları")
 
-    # Modelden gelen "Slayt X:" yapılarını parçala
-    slaytlar = re.split(r'Slayt \d+:', icerik)
-    for s in slaytlar:
-        if len(s.strip()) < 5: continue
-        # Şablonun tasarımını (layout) kullanarak yeni slayt ekle
-        slide = prs.slides.add_slide(prs.slide_layouts[1] if len(prs.slide_layouts)>1 else prs.slide_layouts[0])
-        lines = s.strip().split('\n')
-        if slide.shapes.title:
-            slide.shapes.title.text = lines[0].replace("*", "")
-        if len(lines) > 1 and slide.placeholders:
-            body = slide.placeholders[1]
-            body.text = "\n".join(lines[1:]).replace("*", "")
-            
-    buf = io.BytesIO()
-    prs.save(buf)
-    buf.seek(0)
-    return buf
+# --- SOHBET GEÇMİŞİ ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# --- ARAYÜZ ---
-st.sidebar.title("🛡️ Eren AI v15.5")
-st.sidebar.info("Dosya Okuma Garantili Sürüm")
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# Dosya Yükleme Alanı (En Üstte ve Sabit)
-yuklenen_dosya = st.file_uploader("Analiz Edilecek PDF veya Görsel", type=['pdf', 'png', 'jpg'])
+# --- GİRİŞ PANELİ ---
+with st.container():
+    c1, c2 = st.columns([1, 4])
+    with c1:
+        dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v13", label_visibility="collapsed")
+    with c2:
+        soru = st.chat_input("Mesajınızı buraya yazın...")
 
-# Kullanıcı Sorusu
-soru = st.chat_input("Yüklediğim dosyayı detaylıca analiz et...")
-
+# --- AKILLI İŞLEMCİ ---
 if soru:
+    st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"):
         st.markdown(soru)
-    
+
     with st.chat_message("assistant"):
-        islem = st.status("🔍 Dosya katmanları taranıyor...")
-        
-        # DOSYA İÇERİĞİNİ ZORLA ÇEK
-        besleme_listesi = ["Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Aşağıdaki dosyayı SADECE içindeki bilgilere sadık kalarak analiz et."]
-        
-        if yuklenen_dosya:
-            if yuklenen_dosya.type == "application/pdf":
-                okuyucu = PdfReader(yuklenen_dosya)
-                metin = "\n".join([sayfa.extract_text() for sayfa in okuyucu.pages if sayfa.extract_text()])
-                if metin:
-                    besleme_listesi.append(f"DOSYA İÇERİĞİ:\n{metin}")
-                    islem.write("✅ PDF metni başarıyla çıkarıldı.")
-            elif yuklenen_dosya.type.startswith("image/"):
-                besleme_listesi.append(Image.open(yuklenen_dosya))
-                islem.write("✅ Görsel verisi işleme alındı.")
-        
-        besleme_listesi.append(f"Kullanıcı İsteği: {soru}")
+        durum = st.status("🛡️ Eren AI düşünüyor...")
         
         try:
-            # Modeli Çalıştır
-            yanit = model.generate_content(besleme_listesi)
-            islem.update(label="✅ Analiz Bitti", state="complete")
+            # --- ANA TALİMAT BLOĞU ---
+            system_instruction = f"""
+            Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanısın. {OKUL_BILGILERI}
+            TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
+
+            KRİTİK KURALLAR: 
+            1. OKUL SORULARI: Okulun idari kadrosu, vizyonu veya etkinlikleri sorulduğunda, daima eren.k12.tr adresini referans al. 
+            2. BAĞLAM YÖNETİMİ: Kullanıcı doğrudan dosyaya referans vermedikçe (özetle, analiz et vb.) dosyayı görmezden gel.
+            3. ÖĞRETMEN DESTEĞİ: "Quiz hazırla", "ödev oluştur" gibi taleplerde, Fen ve Teknoloji Lisesi standartlarına uygun, cevap anahtarlı içerikler üret.
+            4. KURUMSAL ÜSLUP: "Dosyada bilgi yok" gibi teknik ifadeler kullanma, gerekirse okul web sitesine yönlendir.
+            """
             
-            st.markdown(yanit.text)
+            prompt_parts = [system_instruction, soru]
             
-            # Sunum İndirme Butonu
-            st.divider()
-            st.download_button("📊 Sunumu İndir (Kurumsal Şablon)", 
-                             data=sunum_hazirla(yanit.text), 
-                             file_name="Eren_AI_Analiz.pptx")
-                             
+            # Eğer kullanıcı dosyaya referans veriyorsa içeriği ekle
+            if dosya:
+                analiz_kelimeleri = ["dosya", "belge", "doküman", "özet", "listele", "tablo", "analiz", "oku", "yüklediğim", "quiz", "soru", "ödev"]
+                if any(kelime in soru.lower() for kelime in analiz_kelimeleri):
+                    if dosya.type.startswith("image/"):
+                        prompt_parts.append(Image.open(dosya))
+                    elif dosya.type == "application/pdf":
+                        reader = PdfReader(dosya)
+                        pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                        if len(pdf_metni.strip()) > 50:
+                            prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{pdf_metni}")
+                        else:
+                            dosya.seek(0)
+                            prompt_parts.extend(pdf2image.convert_from_bytes(dosya.read())[:5])
+                    else:
+                        ek_metin = metin_ayikla(dosya)
+                        if ek_metin: prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{ek_metin}")
+
+            response = model.generate_content(prompt_parts)
+            
+            if response:
+                durum.update(label="✅ Hazır", state="complete")
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                
         except Exception as e:
-            st.error(f"Hata oluştu: {e}")
+            durum.update(label="❌ Hata", state="error")
+            st.error(f"Sistem hatası: {str(e)}")
