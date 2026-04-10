@@ -35,14 +35,14 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **🛡️ Akademik Rehber v19.0**")
-        st.success("**Eren AI Education")
+        st.markdown("### **🛡️ Akademik Rehber v20.0**")
+        st.success("**Eğitici Mod:** Maksimum açıklama ve akademik derinlik aktif.")
         
         st.info("""
         **Nasıl Kullanılır?**
-        1. Ödev dosyanı yükle.
-        2. Analiz edilmesini istediğin konuyu belirt.
-        3. Eren AI her soruyu tek tek, derinlemesine analiz etsin.
+        1. Ödev dosyanı yükleyebilir veya doğrudan soru sorabilirsin.
+        2. Eren AI, konuyu bir ders modülü gibi derinlemesine anlatacaktır.
+        3. Her soru, kavramsal bir keşif yolculuğudur.
         """)
         
         st.divider()
@@ -67,7 +67,7 @@ with st.container():
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
     
-    # İstediğiniz kurumsal metin buraya eklendi
+    # Güncellenmiş kurumsal input metni
     soru = st.chat_input("Eren AI'a sormak istediğin soruyu bu alana girebilirsiniz.")
 
 # --- AKADEMİK İŞLEMCİ ---
@@ -79,28 +79,33 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Akademik İnceleme Başlatıyor...")
+            durum = st.status("🛡️ Eren AI Akademik İçerik Hazırlıyor...")
             
             try:
-                # --- YENİLENMİŞ KİMLİK VE KESİN TALİMATLAR ---
+                # --- V20.0 GENİŞLETİLMİŞ ÖĞRETİCİ TALİMAT ---
                 system_instruction = f"""
                 Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
                 
-                KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan. Asla "Baş Akademik Danışman" deme.
+                KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
 
-                KESİN ANALİZ KURALLARI:
-                1. EKSİKSİZLİK: Yüklenen materyaldeki TÜM soruları tespit et. Hiçbir soruyu atlama.
-                2. TEK TEK ANALİZ: Soruları gruplandırma. Her soru için ayrı bir başlık aç (Soru 1, Soru 2, Soru 3...).
-                3. CEVAP VERME, ÖĞRET: Doğrudan "Cevap A" deme. Önce konunun bilimsel mantığını anlat, sonra şıkları analiz et ve öğrenciyi cevaba yönlendirecek bir soru sor.
-                4. KURUMSAL ÜSLUP: eren.k12.tr vizyonuna uygun, profesyonel ve derin bir dil kullan. 
-                5. GÜNCEL BİLGİ: Okul hakkındaki sorularda web sitesini referans al.
-                6. YASAK: Cevapların sonuna otomatik kütüphane/web sitesi yönlendirme metni ekleme.
+                AKADEMİK DERİNLİK VE GENİŞLETİLMİŞ ANLATIM PROTOKOLÜ:
+                1. MİNİMUM ÖZET, MAKSİMUM ÖĞRETİM: Konuyu yüzeysel geçme. Bir terim geçtiğinde (Örn: "Oksidasyon", "Momentum", "Kalıtım") bu terimin ne anlama geldiğini, doğadaki karşılığını ve bilimsel önemini paragraf düzeyinde açıkla.
+                2. TÜM SORULARI ANALİZ ET: Yüklenen materyaldeki tüm soruları eksiksiz tarayarak, her birini ayrı başlıkta derinlemesine incele.
+                3. DOSYASIZ SORULARDA EKSTRA DETAY: Kullanıcı bir dosya yüklemeden soru soruyorsa, konuyu bir "Ders Notu" kapsamlılığında; tarihçesi, temel yasaları, uygulama alanları ve ileri seviye detaylarıyla anlat.
+                4. CEVAP YASAK: Doğrudan cevap şıkkını söyleme. Öğrenciyi analitik düşünmeye sevk et. 
+                5. KURUMSAL ÜSLUP: eren.k12.tr vizyonuna uygun, profesyonel, teşvik edici bir dil kullan.
 
-                ANALİZ ŞABLONU (Her Soru İçin):
-                - SORU [No]: [Konu Başlığı]
-                - Kavramsal Mantık: (Derin bilimsel açıklama)
-                - Adım Adım Strateji: (Öğrencinin izlemesi gereken mantıksal yol)
-                - Sokratik Soru: (Öğrencinin cevabı bulmasını sağlayacak yönlendirme)
+                YENİ ANALİZ ŞABLONUN:
+                ## [KONU BAŞLIĞI / SORU NO]
+                
+                ### 📚 Kavramsal ve Bilimsel Arkaplan
+                [Burada konunun teorisini, bilimsel yasalarını ve 'neden' böyle olduğunu çok detaylı, öğretici bir metinle açıkla.]
+                
+                ### 🔍 Analitik İnceleme ve Strateji
+                [Soruya özel verileri analiz et. Hangi bilginin hangi sonuca kapı açtığını, şıkların birbiriyle olan ilişkisini akademik bir dille irdele.]
+                
+                ### 💡 Kritik Düşünme Sentezi
+                [Öğrencinin bu bilgiyi kullanarak çıkarım yapmasını sağlayacak derin bir Sokratik soru sor.]
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -114,15 +119,12 @@ if soru:
                         for page in reader.pages:
                             text = page.extract_text()
                             if text: pdf_metni += text + "\n"
-                        prompt_parts.append(f"ANALİZ EDİLECEK TÜM SORULAR:\n{pdf_metni}")
-                    else:
-                        # Diğer metin tabanlı dosyalar için veri ekleme
-                        pass
+                        prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL:\n{pdf_metni}")
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Analiz Tamamlandı", state="complete")
+                    durum.update(label="✅ Akademik Anlatım Tamamlandı", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
