@@ -2,6 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
 from PIL import Image
+import pdf2image
+import pandas as pd
 from docx import Document
 from pptx import Presentation
 import io
@@ -18,19 +20,17 @@ else:
 
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- KURUMSAL TABAN ---
+# --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
 OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
 
-# --- SUNUM VE DOSYA MOTORLARI ---
-def metin_temizle(metin):
-    return re.sub(r'\*\*|\$|\*', '', metin).strip()
-
+# --- SUNUM OLUŞTURMA MOTORU (Şablon Destekli) ---
 def pptx_olustur(icerik):
     try:
         prs = Presentation("template.pptx")
+        # Şablonu temizle
         while len(prs.slides) > 0:
-            r_id = prs.slides._sldIdLst[0].rId
-            prs.part.drop_rel(r_id)
+            rId = prs.slides._sldIdLst[0].rId
+            prs.part.drop_rel(rId)
             del prs.slides._sldIdLst[0]
     except:
         prs = Presentation()
@@ -41,89 +41,120 @@ def pptx_olustur(icerik):
         layout = prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0]
         slide = prs.slides.add_slide(layout)
         satirlar = parca.strip().split('\n')
-        if slide.shapes.title: slide.shapes.title.text = metin_temizle(satirlar[0])
+        
+        # Temizleme ve Yerleştirme
+        baslik = satirlar[0].replace("**", "").replace("*", "").strip()
+        if slide.shapes.title: slide.shapes.title.text = baslik
+        
         for shape in slide.placeholders:
             if shape.placeholder_format.type == 2:
                 tf = shape.text_frame
                 tf.text = ""
                 for satir in satirlar[1:]:
-                    temiz = metin_temizle(satir)
-                    if temiz:
+                    temiz_satir = satir.replace("**", "").replace("*", "").strip()
+                    if temiz_satir:
                         p = tf.add_paragraph()
-                        p.text = temiz
+                        p.text = temiz_satir
                         p.level = 0
+    
     buffer = io.BytesIO()
     prs.save(buffer)
     buffer.seek(0)
     return buffer
 
-# --- SIDEBAR ---
+def metin_ayikla(dosya):
+    try:
+        if dosya.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            return "\n".join([p.text for p in Document(dosya).paragraphs])
+        elif "spreadsheet" in dosya.type or "csv" in dosya.type:
+            df = pd.read_excel(dosya) if "spreadsheet" in dosya.type else pd.read_csv(dosya)
+            return f"TABLO VERİSİ:\n{df.to_string()}"
+        elif "presentationml" in dosya.type:
+            prs = Presentation(dosya)
+            return "\n".join([shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text")])
+        return None
+    except Exception as e:
+        return f"Dosya Okuma Hatası: {e}"
+
+# --- SOL MENÜ ---
 with st.sidebar:
     try: st.image("Logo.png", use_container_width=True)
     except: st.subheader("🛡️ Eren AI")
-    st.markdown("### **Akademik Portal v15.6**")
-    st.info("Mesaj alanı ve dosya yükleyici en alta taşındı.")
+    st.markdown("### **Akademik Portal v15.7**")
+    st.info("Stabil sürüm: Giriş alanları en alta taşındı.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
-# --- SOHBET GEÇMİŞİ (EKRANIN ÜSTÜNDE KALIR) ---
+# --- SOHBET GEÇMİŞİ (ÜST ALAN) ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mesajları bir container içinde gösteriyoruz (Otomatik yukarı kayması için)
-chat_placeholder = st.container()
-
-with chat_placeholder:
+# Mesajları bir kap (container) içinde göster
+chat_container = st.container()
+with chat_container:
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
-            if "file_link" in m: # Eğer mesajda bir indirme linki varsa tekrar göster
-                st.info("Dosya çıktıları yukarıdaki analizde mevcuttur.")
 
-# --- GİRİŞ PANELİ (SAYFANIN EN ALTINDA) ---
-st.divider()
-footer_container = st.container()
+# --- GİRİŞ PANELİ (EN ALT ALAN) ---
+# Bu kısım sayfanın en altında sabit kalır
+st.write("") # Boşluk
+with st.container():
+    # Dosya yükleyici ve chat input'u yan yana veya alt alta alabiliriz
+    # Genelde dosya yükleyiciyi chat input'un hemen üstünde tutmak daha kullanışlıdır
+    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v15_7", label_visibility="collapsed")
+    soru = st.chat_input("Mesajınızı buraya yazın...")
 
-with footer_container:
-    # Dosya yükleyiciyi mesaj kutusunun hemen üzerine koyuyoruz
-    dosya = st.file_uploader("Analiz edilecek dosya", type=['pdf','docx','png','jpg','pptx'], label_visibility="collapsed")
-    soru = st.chat_input("Eren AI'ya bir soru sorun veya dosyanızı analiz ettirin...")
-
+# --- AKILLI İŞLEMCİ ---
 if soru:
-    # Kullanıcı mesajını ekrana bas ve hafızaya al
     st.session_state.messages.append({"role": "user", "content": soru})
-    with chat_placeholder:
+    with chat_container:
         with st.chat_message("user"):
             st.markdown(soru)
 
-    with chat_placeholder:
+    with chat_container:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI analiz yapıyor...")
+            durum = st.status("🛡️ Eren AI düşünüyor...")
             try:
-                # Dosya okuma ve besleme hazırlığı
-                besleme = [f"Sen Eren Fen ve Teknoloji Lisesi asistanısın. {OKUL_BILGILERI} Sunumlarda 'Slayt X: [Başlık]' yapısını kullan."]
+                system_instruction = f"""
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanısın. {OKUL_BILGILERI}
+                Sunum isteklerinde mutlaka 'Slayt 1:', 'Slayt 2:' formatını kullan.
+                """
+                
+                prompt_parts = [system_instruction, soru]
                 
                 if dosya:
-                    if dosya.type == "application/pdf":
-                        pdf_text = "\n".join([p.extract_text() for p in PdfReader(dosya).pages if p.extract_text()])
-                        besleme.append(f"DOSYA İÇERİĞİ:\n{pdf_text}")
-                    elif dosya.type.startswith("image/"):
-                        besleme.append(Image.open(dosya))
-                
-                besleme.append(soru)
-                response = model.generate_content(besleme)
+                    analiz_kelimeleri = ["dosya", "belge", "doküman", "özet", "listele", "tablo", "analiz", "oku", "yüklediğim", "quiz", "soru", "ödev", "sunum"]
+                    if any(kelime in soru.lower() for kelime in analiz_kelimeleri):
+                        if dosya.type.startswith("image/"):
+                            prompt_parts.append(Image.open(dosya))
+                        elif dosya.type == "application/pdf":
+                            reader = PdfReader(dosya)
+                            pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
+                            if len(pdf_metni.strip()) > 50:
+                                prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{pdf_metni}")
+                            else:
+                                dosya.seek(0)
+                                prompt_parts.extend(pdf2image.convert_from_bytes(dosya.read())[:5])
+                        else:
+                            ek_metin = metin_ayikla(dosya)
+                            if ek_metin: prompt_parts.append(f"İLGİLİ DOSYA İÇERİĞİ:\n{ek_metin}")
+
+                response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Analiz Tamamlandı", state="complete")
+                    durum.update(label="✅ Hazır", state="complete")
                     st.markdown(response.text)
                     
-                    # Çıktı Butonları
-                    st.divider()
-                    c1, c2 = st.columns(2)
-                    with c1: st.download_button("📊 Kurumsal Sunum", data=pptx_olustur(response.text), file_name="Eren_AI_Sunum.pptx")
-                    with c2: st.download_button("📄 Word Notu", data=io.BytesIO(response.text.encode()), file_name="Eren_AI_Not.txt")
+                    # Eğer sunum hazırlandıysa indirme butonu göster
+                    if "Slayt 1" in response.text:
+                        st.divider()
+                        st.download_button("📊 Kurumsal Sunumu İndir", 
+                                         data=pptx_olustur(response.text), 
+                                         file_name="Eren_AI_Sunum.pptx")
                     
-                    st.session_state.messages.append({"role": "assistant", "content": response.text, "file_link": True})
-            
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+                    
             except Exception as e:
-                st.error(f"Sistem hatası: {e}")
+                durum.update(label="❌ Hata", state="error")
+                st.error(f"Sistem hatası: {str(e)}")
