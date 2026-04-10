@@ -26,7 +26,7 @@ OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SOL MENÜ (EKRAN GÖRÜNTÜSÜYLE BİREBİR) ---
+# --- SOL MENÜ (KURUMSAL YAPI) ---
 def sidebar_ciz():
     with st.sidebar:
         try:
@@ -35,14 +35,14 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **🛡️ Akademik Rehber v18.0**")
-        st.success("**Eğitici Mod Aktif:** Her soru bir ders niteliğindedir.")
+        st.markdown("### **🛡️ Akademik Rehber v19.0**")
+        st.success("**Eğitici Mod Aktif:** Analitik ve derinlemesine öğrenme süreci.")
         
         st.info("""
         **Nasıl Kullanılır?**
-        1. Ödev dosyanı aşağıdan yükle.
-        2. Sorularını sor.
-        3. Eren AI her soruyu derinlemesine analiz etsin.
+        1. Ödev dosyanı yükle.
+        2. Analiz edilmesini istediğin konuyu belirt.
+        3. Eren AI her soruyu tek tek, derinlemesine analiz etsin.
         """)
         
         st.divider()
@@ -63,11 +63,12 @@ with chat_area:
 # --- GİRİŞ PANELİ ---
 with st.container():
     st.write("---")
-    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
+    dosya = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
     
-    soru = st.chat_input("Akademik danışmanınıza sormak istediğiniz konuyu veya sorunuzu buraya giriniz...")
+    # İstediğiniz kurumsal metin buraya eklendi
+    soru = st.chat_input("Eren AI'a sormak istediğin soruyu bu alana girebilirsiniz.")
 
 # --- AKADEMİK İŞLEMCİ ---
 if soru:
@@ -78,26 +79,28 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Soruları Tek Tek Analiz Ediyor...")
+            durum = st.status("🛡️ Eren AI Akademik İnceleme Başlatıyor...")
             
             try:
-                # --- GÜNCELLENMİŞ KURUMSAL VE SORU ODAKLI TALİMAT ---
+                # --- YENİLENMİŞ KİMLİK VE KESİN TALİMATLAR ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Danışmanısın. {OKUL_BILGILERI}
-                TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
+                Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
+                
+                KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan. Asla "Baş Akademik Danışman" deme.
 
-                KRİTİK ANALİZ PROTOKOLÜ (SORU SORU ANALİZ):
-                1. GENELLEME YAPMA: Materyaldeki soruları özetleme. Her bir soruyu (Soru 1, Soru 2, Soru 3...) ayrı birer başlık altında incele.
-                2. AKADEMİK DERİNLİK: Cevabı asla doğrudan verme. Sorunun mantığını temel bilimsel yasalarla (polinomiyal açılım, hücre teorisi, termodinamik vb.) açıkla. 
-                3. BAĞLAM YÖNETİMİ: Yüklenen dosyadaki verileri Fen ve Teknoloji Lisesi standartlarında, teknik detayları atlamadan analiz et.
-                4. KURUMSAL ÜSLUP: Profesyonel, teşvik edici ve çözüm odaklı bir dil kullan. Asla "Kütüphaneye bak" gibi yönlendirme metinleri ekleme.
-                5. SOKRATİK YÖNTEM: Her sorunun analizinden sonra öğrenciye cevabı bulduracak kritik bir mantık sorusu sor.
+                KESİN ANALİZ KURALLARI:
+                1. EKSİKSİZLİK: Yüklenen materyaldeki TÜM soruları tespit et. Hiçbir soruyu atlama.
+                2. TEK TEK ANALİZ: Soruları gruplandırma. Her soru için ayrı bir başlık aç (Soru 1, Soru 2, Soru 3...).
+                3. CEVAP VERME, ÖĞRET: Doğrudan "Cevap A" deme. Önce konunun bilimsel mantığını anlat, sonra şıkları analiz et ve öğrenciyi cevaba yönlendirecek bir soru sor.
+                4. KURUMSAL ÜSLUP: eren.k12.tr vizyonuna uygun, profesyonel ve derin bir dil kullan. 
+                5. GÜNCEL BİLGİ: Okul hakkındaki sorularda web sitesini referans al.
+                6. YASAK: Cevapların sonuna otomatik kütüphane/web sitesi yönlendirme metni ekleme.
 
-                ANALİZ ŞABLONUN:
-                - SORU [NO]: [KONU BAŞLIĞI]
-                - Kavramsal Mantık: (Bilimsel açıklama)
-                - Çözüm Stratejisi: (Adım adım rehberlik)
-                - Kritik Düşünme Sorusu: (Öğrenciye yönelik etkileşim)
+                ANALİZ ŞABLONU (Her Soru İçin):
+                - SORU [No]: [Konu Başlığı]
+                - Kavramsal Mantık: (Derin bilimsel açıklama)
+                - Adım Adım Strateji: (Öğrencinin izlemesi gereken mantıksal yol)
+                - Sokratik Soru: (Öğrencinin cevabı bulmasını sağlayacak yönlendirme)
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -107,13 +110,19 @@ if soru:
                         prompt_parts.append(Image.open(dosya))
                     elif dosya.type == "application/pdf":
                         reader = PdfReader(dosya)
-                        pdf_metni = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
-                        prompt_parts.append(f"ANALİZ EDİLECEK MATERYAL:\n{pdf_metni}")
+                        pdf_metni = ""
+                        for page in reader.pages:
+                            text = page.extract_text()
+                            if text: pdf_metni += text + "\n"
+                        prompt_parts.append(f"ANALİZ EDİLECEK TÜM SORULAR:\n{pdf_metni}")
+                    else:
+                        # Diğer metin tabanlı dosyalar için veri ekleme
+                        pass
 
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Soru Analizleri Hazır", state="complete")
+                    durum.update(label="✅ Analiz Tamamlandı", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
@@ -122,5 +131,5 @@ if soru:
                         st.rerun() 
                     
             except Exception as e:
-                durum.update(label="❌ Sistem Hatası", state="error")
-                st.error(f"Teknik bir sorun oluştu: {str(e)}")
+                durum.update(label="❌ Hata", state="error")
+                st.error(f"Sistem hatası: {str(e)}")
