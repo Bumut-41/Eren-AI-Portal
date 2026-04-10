@@ -2,7 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
 from PIL import Image
-import pandas as pd
 from docx import Document
 from pptx import Presentation
 import io
@@ -23,14 +22,12 @@ model = genai.GenerativeModel('gemini-3-flash-preview')
 OKUL_BILGILERI = "Özel Eren Fen ve Teknoloji Lisesi (https://eren.k12.tr/)"
 
 def metin_temizle(metin):
-    # LaTeX ve Markdown kirliliğini sunum için temizler
     metin = re.sub(r'\*\*|\$|\*', '', metin)
     return metin.strip()
 
 def pptx_olustur(icerik):
     try:
         prs = Presentation("template.pptx")
-        # Mevcut tüm slaytları silerek şablonu sıfırla (Görsel 7 karmaşasını önler)
         while len(prs.slides) > 0:
             r_id = prs.slides._sldIdLst[0].rId
             prs.part.drop_rel(r_id)
@@ -41,17 +38,12 @@ def pptx_olustur(icerik):
     parcalar = re.split(r'Slayt \d+:', icerik)
     for parca in parcalar:
         if len(parca.strip()) < 10: continue
-        
-        # Tasarımlı boş sayfa ekle
         layout = prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0]
         slide = prs.slides.add_slide(layout)
         satirlar = parca.strip().split('\n')
-        
-        if slide.shapes.title:
-            slide.shapes.title.text = metin_temizle(satirlar[0])
-        
+        if slide.shapes.title: slide.shapes.title.text = metin_temizle(satirlar[0])
         for shape in slide.placeholders:
-            if shape.placeholder_format.type == 2: # İçerik kutusu
+            if shape.placeholder_format.type == 2:
                 tf = shape.text_frame
                 tf.text = ""
                 for satir in satirlar[1:]:
@@ -65,21 +57,10 @@ def pptx_olustur(icerik):
     buffer.seek(0)
     return buffer
 
-def word_olustur(icerik):
-    doc = Document()
-    doc.add_heading('Eren AI Akademik Rapor', 0)
-    for line in icerik.split('\n'):
-        if line.strip(): doc.add_paragraph(metin_temizle(line))
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    buffer.seek(0)
-    return buffer
-
 # --- ANA ARAYÜZ ---
 with st.sidebar:
-    try: st.image("Logo.png", use_container_width=True)
-    except: st.title("🛡️ Eren AI")
-    st.info("v15.3: Kararlı Dosya Okuma Motoru")
+    st.title("🛡️ Eren AI")
+    st.info("v15.4: Zorunlu Dosya Analizi Aktif")
 
 if "messages" not in st.session_state: st.session_state.messages = []
 for m in st.session_state.messages:
@@ -87,39 +68,50 @@ for m in st.session_state.messages:
 
 # Giriş Alanı
 with st.container():
-    yuklenen_dosya = st.file_uploader("Belge/Görsel Yükle", type=['pdf','docx','xlsx','png','jpg','pptx'])
-    soru = st.chat_input("Dosyayı özetle veya sunum yap...")
+    yuklenen_dosya = st.file_uploader("Özetlenecek Belgeyi Yükleyin", type=['pdf','docx','png','jpg','pptx'], key="main_uploader")
+    soru = st.chat_input("Yüklediğim dosyayı özetle veya analiz et...")
 
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
     with st.chat_message("user"): st.markdown(soru)
 
     with st.chat_message("assistant"):
-        islem = st.status("🛡️ Eren AI dosyayı analiz ediyor...")
+        islem = st.status("🛡️ Dosya içeriği zorla okunuyor...")
         try:
-            # Model besleme listesi
-            besleme = [f"Sen Eren Fen ve Teknoloji Lisesi asistanısın. {OKUL_BILGILERI}. Sunumlarda 'Slayt X: [Başlık]' yapısını kullan."]
-            
-            # --- DOSYA OKUMA VE BESLEME ---
+            # ÖNCE DOSYA İÇERİĞİNİ HAZIRLA
+            dosya_icerigi = ""
+            gorsel_verisi = None
+
             if yuklenen_dosya:
                 if yuklenen_dosya.type.startswith("image/"):
-                    besleme.append(Image.open(yuklenen_dosya))
+                    gorsel_verisi = Image.open(yuklenen_dosya)
+                    dosya_icerigi = "[Görsel Yüklendi]"
                 elif yuklenen_dosya.type == "application/pdf":
-                    pdf_metni = ""
-                    for sayfa in PdfReader(yuklenen_dosya).pages:
-                        pdf_metni += sayfa.extract_text() + "\n"
-                    besleme.append(f"ANALİZ EDİLECEK METİN:\n{pdf_metni}")
+                    reader = PdfReader(yuklenen_dosya)
+                    pdf_text = ""
+                    for page in reader.pages:
+                        pdf_text += page.extract_text() + "\n"
+                    dosya_icerigi = f"DİKKAT! KULLANICI ŞU DOSYAYI YÜKLEDİ VE ÖZETİNİ İSTİYOR:\n--- DOSYA METNİ ---\n{pdf_text}\n--- METİN SONU ---"
             
-            besleme.append(f"Kullanıcı Sorusu: {soru}")
+            # MODELİ BESLE (Dosya içeriğini en tepeye koyduk)
+            besleme = []
+            if dosya_icerigi: besleme.append(dosya_icerigi)
+            if gorsel_verisi: besleme.append(gorsel_verisi)
+            
+            besleme.append(f"Talimat: Sen {OKUL_BILGILERI} asistanısın. Eğer yukarıda bir dosya metni varsa SADECE O METNİ kullanarak '{soru}' isteğini yerine getir. Eğer dosya yoksa kullanıcıyı uyar. Sunum formatı: 'Slayt X: [Başlık]'.")
+            
             response = model.generate_content(besleme)
             
             if response:
                 islem.update(label="✅ Analiz Tamamlandı", state="complete")
                 st.markdown(response.text)
+                
+                # Sadece cevap geldiyse butonları göster
                 st.divider()
-                col1, col2 = st.columns(2)
-                with col1: st.download_button("📊 Sunumu İndir", data=pptx_olustur(response.text), file_name="Eren_AI_Sunum.pptx")
-                with col2: st.download_button("📄 Word İndir", data=word_olustur(response.text), file_name="Eren_AI_Rapor.docx")
+                c1, c2 = st.columns(2)
+                with c1: st.download_button("📊 Sunum Olarak İndir", data=pptx_olustur(response.text), file_name="Analiz_Sunum.pptx")
+                with c2: st.download_button("📄 Metin Olarak İndir", data=io.BytesIO(response.text.encode()), file_name="Analiz.txt")
+                
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
         except Exception as e:
-            st.error(f"Sistem hatası: {e}")
+            st.error(f"Kritik Hata: {e}")
