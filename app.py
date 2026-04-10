@@ -2,116 +2,96 @@ import streamlit as st
 import google.generativeai as genai
 from PyPDF2 import PdfReader
 from PIL import Image
-from docx import Document
 from pptx import Presentation
 import io
 import re
 
-# --- SİSTEM AYARLARI ---
-st.set_page_config(page_title="Eren AI | Kurumsal Portal", page_icon="🛡️", layout="wide")
+# --- AYARLAR ---
+st.set_page_config(page_title="Eren AI | Kurumsal", layout="wide")
 
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı!")
+    st.error("API Key eksik!")
     st.stop()
 
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- KURUMSAL TABAN ---
-OKUL_BILGILERI = "Özel Eren Fen ve Teknoloji Lisesi (https://eren.k12.tr/)"
-
-def metin_temizle(metin):
-    metin = re.sub(r'\*\*|\$|\*', '', metin)
-    return metin.strip()
-
-def pptx_olustur(icerik):
+# --- ŞABLON TEMİZLEME MOTORU ---
+def sunum_hazirla(icerik):
     try:
         prs = Presentation("template.pptx")
+        # Şablonu tamamen boşalt (Eski uçak resimlerini ve latin metinlerini siler)
         while len(prs.slides) > 0:
-            r_id = prs.slides._sldIdLst[0].rId
-            prs.part.drop_rel(r_id)
+            rId = prs.slides._sldIdLst[0].rId
+            prs.part.drop_rel(rId)
             del prs.slides._sldIdLst[0]
     except:
         prs = Presentation()
-    
-    parcalar = re.split(r'Slayt \d+:', icerik)
-    for parca in parcalar:
-        if len(parca.strip()) < 10: continue
-        layout = prs.slide_layouts[1] if len(prs.slide_layouts) > 1 else prs.slide_layouts[0]
-        slide = prs.slides.add_slide(layout)
-        satirlar = parca.strip().split('\n')
-        if slide.shapes.title: slide.shapes.title.text = metin_temizle(satirlar[0])
-        for shape in slide.placeholders:
-            if shape.placeholder_format.type == 2:
-                tf = shape.text_frame
-                tf.text = ""
-                for satir in satirlar[1:]:
-                    temiz = metin_temizle(satir)
-                    if temiz:
-                        p = tf.add_paragraph()
-                        p.text = temiz
-                        p.level = 0
-    buffer = io.BytesIO()
-    prs.save(buffer)
-    buffer.seek(0)
-    return buffer
 
-# --- ANA ARAYÜZ ---
-with st.sidebar:
-    st.title("🛡️ Eren AI")
-    st.info("v15.4: Zorunlu Dosya Analizi Aktif")
+    # Modelden gelen "Slayt X:" yapılarını parçala
+    slaytlar = re.split(r'Slayt \d+:', icerik)
+    for s in slaytlar:
+        if len(s.strip()) < 5: continue
+        # Şablonun tasarımını (layout) kullanarak yeni slayt ekle
+        slide = prs.slides.add_slide(prs.slide_layouts[1] if len(prs.slide_layouts)>1 else prs.slide_layouts[0])
+        lines = s.strip().split('\n')
+        if slide.shapes.title:
+            slide.shapes.title.text = lines[0].replace("*", "")
+        if len(lines) > 1 and slide.placeholders:
+            body = slide.placeholders[1]
+            body.text = "\n".join(lines[1:]).replace("*", "")
+            
+    buf = io.BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    return buf
 
-if "messages" not in st.session_state: st.session_state.messages = []
-for m in st.session_state.messages:
-    with st.chat_message(m["role"]): st.markdown(m["content"])
+# --- ARAYÜZ ---
+st.sidebar.title("🛡️ Eren AI v15.5")
+st.sidebar.info("Dosya Okuma Garantili Sürüm")
 
-# Giriş Alanı
-with st.container():
-    yuklenen_dosya = st.file_uploader("Özetlenecek Belgeyi Yükleyin", type=['pdf','docx','png','jpg','pptx'], key="main_uploader")
-    soru = st.chat_input("Yüklediğim dosyayı özetle veya analiz et...")
+# Dosya Yükleme Alanı (En Üstte ve Sabit)
+yuklenen_dosya = st.file_uploader("Analiz Edilecek PDF veya Görsel", type=['pdf', 'png', 'jpg'])
+
+# Kullanıcı Sorusu
+soru = st.chat_input("Yüklediğim dosyayı detaylıca analiz et...")
 
 if soru:
-    st.session_state.messages.append({"role": "user", "content": soru})
-    with st.chat_message("user"): st.markdown(soru)
-
+    with st.chat_message("user"):
+        st.markdown(soru)
+    
     with st.chat_message("assistant"):
-        islem = st.status("🛡️ Dosya içeriği zorla okunuyor...")
+        islem = st.status("🔍 Dosya katmanları taranıyor...")
+        
+        # DOSYA İÇERİĞİNİ ZORLA ÇEK
+        besleme_listesi = ["Sen Özel Eren Fen ve Teknoloji Lisesi asistanısın. Aşağıdaki dosyayı SADECE içindeki bilgilere sadık kalarak analiz et."]
+        
+        if yuklenen_dosya:
+            if yuklenen_dosya.type == "application/pdf":
+                okuyucu = PdfReader(yuklenen_dosya)
+                metin = "\n".join([sayfa.extract_text() for sayfa in okuyucu.pages if sayfa.extract_text()])
+                if metin:
+                    besleme_listesi.append(f"DOSYA İÇERİĞİ:\n{metin}")
+                    islem.write("✅ PDF metni başarıyla çıkarıldı.")
+            elif yuklenen_dosya.type.startswith("image/"):
+                besleme_listesi.append(Image.open(yuklenen_dosya))
+                islem.write("✅ Görsel verisi işleme alındı.")
+        
+        besleme_listesi.append(f"Kullanıcı İsteği: {soru}")
+        
         try:
-            # ÖNCE DOSYA İÇERİĞİNİ HAZIRLA
-            dosya_icerigi = ""
-            gorsel_verisi = None
-
-            if yuklenen_dosya:
-                if yuklenen_dosya.type.startswith("image/"):
-                    gorsel_verisi = Image.open(yuklenen_dosya)
-                    dosya_icerigi = "[Görsel Yüklendi]"
-                elif yuklenen_dosya.type == "application/pdf":
-                    reader = PdfReader(yuklenen_dosya)
-                    pdf_text = ""
-                    for page in reader.pages:
-                        pdf_text += page.extract_text() + "\n"
-                    dosya_icerigi = f"DİKKAT! KULLANICI ŞU DOSYAYI YÜKLEDİ VE ÖZETİNİ İSTİYOR:\n--- DOSYA METNİ ---\n{pdf_text}\n--- METİN SONU ---"
+            # Modeli Çalıştır
+            yanit = model.generate_content(besleme_listesi)
+            islem.update(label="✅ Analiz Bitti", state="complete")
             
-            # MODELİ BESLE (Dosya içeriğini en tepeye koyduk)
-            besleme = []
-            if dosya_icerigi: besleme.append(dosya_icerigi)
-            if gorsel_verisi: besleme.append(gorsel_verisi)
+            st.markdown(yanit.text)
             
-            besleme.append(f"Talimat: Sen {OKUL_BILGILERI} asistanısın. Eğer yukarıda bir dosya metni varsa SADECE O METNİ kullanarak '{soru}' isteğini yerine getir. Eğer dosya yoksa kullanıcıyı uyar. Sunum formatı: 'Slayt X: [Başlık]'.")
-            
-            response = model.generate_content(besleme)
-            
-            if response:
-                islem.update(label="✅ Analiz Tamamlandı", state="complete")
-                st.markdown(response.text)
-                
-                # Sadece cevap geldiyse butonları göster
-                st.divider()
-                c1, c2 = st.columns(2)
-                with c1: st.download_button("📊 Sunum Olarak İndir", data=pptx_olustur(response.text), file_name="Analiz_Sunum.pptx")
-                with c2: st.download_button("📄 Metin Olarak İndir", data=io.BytesIO(response.text.encode()), file_name="Analiz.txt")
-                
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            # Sunum İndirme Butonu
+            st.divider()
+            st.download_button("📊 Sunumu İndir (Kurumsal Şablon)", 
+                             data=sunum_hazirla(yanit.text), 
+                             file_name="Eren_AI_Analiz.pptx")
+                             
         except Exception as e:
-            st.error(f"Kritik Hata: {e}")
+            st.error(f"Hata oluştu: {e}")
