@@ -26,7 +26,7 @@ OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
-# --- SOL MENÜ (KURUMSAL YAPI) ---
+# --- SOL MENÜ (KURUMSAL VE SABİT) ---
 def sidebar_ciz():
     with st.sidebar:
         try:
@@ -35,14 +35,14 @@ def sidebar_ciz():
             st.subheader("🛡️ Eren AI")
         
         st.markdown("---")
-        st.markdown("### **🛡️ Akademik Rehber v20.0**")
-        st.success("**Eğitici Mod:** Maksimum açıklama ve akademik derinlik aktif.")
+        st.markdown("### **🛡️ Akademik Rehber v21.0**")
+        st.success("**Anayasal Mod:** Her soru için bireysel ve derin analiz zorunludur.")
         
         st.info("""
-        **Nasıl Kullanılır?**
-        1. Ödev dosyanı yükleyebilir veya doğrudan soru sorabilirsin.
-        2. Eren AI, konuyu bir ders modülü gibi derinlemesine anlatacaktır.
-        3. Her soru, kavramsal bir keşif yolculuğudur.
+        **Sistem İlkeleri:**
+        1. Hiçbir soru atlanmaz.
+        2. Her soru bir "mikro-ders" olarak işlenir.
+        3. Doğrudan cevap verilmez, konu öğretilir.
         """)
         
         st.divider()
@@ -67,7 +67,6 @@ with st.container():
                              key=f"uploader_{st.session_state.uploader_key}", 
                              label_visibility="collapsed")
     
-    # Güncellenmiş kurumsal input metni
     soru = st.chat_input("Eren AI'a sormak istediğin soruyu bu alana girebilirsiniz.")
 
 # --- AKADEMİK İŞLEMCİ ---
@@ -79,33 +78,32 @@ if soru:
 
     with chat_area:
         with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Akademik İçerik Hazırlıyor...")
+            durum = st.status("🛡️ Eren AI Akademik Müfredat Analizi Yapıyor...")
             
             try:
-                # --- V20.0 GENİŞLETİLMİŞ ÖĞRETİCİ TALİMAT ---
+                # --- SİSTEMİN ANAYASASI VE DERİN TALİMATI ---
                 system_instruction = f"""
                 Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
                 
                 KİMLİK TANIMIN: Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
 
-                AKADEMİK DERİNLİK VE GENİŞLETİLMİŞ ANLATIM PROTOKOLÜ:
-                1. MİNİMUM ÖZET, MAKSİMUM ÖĞRETİM: Konuyu yüzeysel geçme. Bir terim geçtiğinde (Örn: "Oksidasyon", "Momentum", "Kalıtım") bu terimin ne anlama geldiğini, doğadaki karşılığını ve bilimsel önemini paragraf düzeyinde açıkla.
-                2. TÜM SORULARI ANALİZ ET: Yüklenen materyaldeki tüm soruları eksiksiz tarayarak, her birini ayrı başlıkta derinlemesine incele.
-                3. DOSYASIZ SORULARDA EKSTRA DETAY: Kullanıcı bir dosya yüklemeden soru soruyorsa, konuyu bir "Ders Notu" kapsamlılığında; tarihçesi, temel yasaları, uygulama alanları ve ileri seviye detaylarıyla anlat.
-                4. CEVAP YASAK: Doğrudan cevap şıkkını söyleme. Öğrenciyi analitik düşünmeye sevk et. 
-                5. KURUMSAL ÜSLUP: eren.k12.tr vizyonuna uygun, profesyonel, teşvik edici bir dil kullan.
+                🛡️ AKADEMİK ANAYASA (DEĞİŞTİRİLEMEZ MADDELER):
+                MADDE 1: MATERYALDEKİ TÜM SORULARI EKSİKSİZ ANALİZ ET. Hiçbir soruyu atlama, özetleme veya geçiştirme.
+                MADDE 2: HER SORUYA AYRI BAŞLIK AÇ. Karma anlatım yapma, her soru bir "mikro-ders" modülüdür.
+                MADDE 3: DERİN KAVRAMSAL ANLATIM ZORUNLUDUR. Sadece çözüm yolu gösterme; konunun bilimsel arka planını, yasalarını ve akademik önemini genişçe anlat.
+                MADDE 4: CEVAP VERMEK YASAKTIR. Şıkları analiz et ama doğru seçeneği söyleme; öğrenciyi oraya akademik çıkarımlarla ulaştır.
+                MADDE 5: SOKRATİK ETKİLEŞİM. Her soru sonunda, o sorunun mantığını test eden bir karşı soru sor.
 
-                YENİ ANALİZ ŞABLONUN:
-                ## [KONU BAŞLIĞI / SORU NO]
+                ANALİZ DÜZENİN:
+                ## [SORU NO VE KONU]
+                ### 📚 Akademik ve Bilimsel Temeller
+                [Konunun teorik, ansiklopedik ve fen lisesi düzeyindeki derin anlatımı.]
                 
-                ### 📚 Kavramsal ve Bilimsel Arkaplan
-                [Burada konunun teorisini, bilimsel yasalarını ve 'neden' böyle olduğunu çok detaylı, öğretici bir metinle açıkla.]
+                ### 🔍 Analitik Çözümleme ve Strateji
+                [Soru verilerinin, öncüllerinin ve şıklarının teknik analizi.]
                 
-                ### 🔍 Analitik İnceleme ve Strateji
-                [Soruya özel verileri analiz et. Hangi bilginin hangi sonuca kapı açtığını, şıkların birbiriyle olan ilişkisini akademik bir dille irdele.]
-                
-                ### 💡 Kritik Düşünme Sentezi
-                [Öğrencinin bu bilgiyi kullanarak çıkarım yapmasını sağlayacak derin bir Sokratik soru sor.]
+                ### 💡 Sokratik Düşünme Köprüsü
+                [Öğrenciye yönelik, bilgiyi pekiştirici derin soru.]
                 """
                 
                 prompt_parts = [system_instruction, soru]
@@ -124,7 +122,7 @@ if soru:
                 response = model.generate_content(prompt_parts)
                 
                 if response:
-                    durum.update(label="✅ Akademik Anlatım Tamamlandı", state="complete")
+                    durum.update(label="✅ Anayasal Akademik Analiz Tamamlandı", state="complete")
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
                     
