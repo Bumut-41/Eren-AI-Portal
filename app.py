@@ -42,52 +42,50 @@ with st.sidebar:
         st.image("Logo.png", use_container_width=True)
     except:
         st.subheader("🛡️ Eren AI")
-    st.markdown("### **Akademik Portal v15.9**")
-    st.info("Eren AI: Kurumsal Bilgi Tabanı ve Akademik Derinlik Protokolü Aktif.")
+    st.markdown("### **Akademik Portal v16.0**")
+    st.info("Eğitici mod ve Akademik Derinlik Protokolü aktif.")
     st.divider()
     st.caption("© 2026 Eren Eğitim Kurumları")
 
-# --- SOHBET GEÇMİŞİ (ÜST ALAN) ---
+# --- SOHBET GEÇMİŞİ ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# Mesajları bir kap (container) içinde göster
-chat_container = st.container()
-with chat_container:
+chat_area = st.container()
+with chat_area:
     for m in st.session_state.messages:
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ (SAYFANIN EN ALTI) ---
-# Bu kısım sayfanın en altında sabit kalır ve görseldeki yapıyı sağlar
-st.write("") # Görsel denge için boşluk
+# --- GİRİŞ PANELİ ---
 with st.container():
     st.write("---")
-    # Dosya yükleyici chat_input'un hemen üzerinde
-    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v15_9", label_visibility="collapsed")
-    soru = st.chat_input("Eren AI Akademik Danışmanına sorun...")
+    dosya = st.file_uploader("Dosya", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], key="eren_v16", label_visibility="collapsed")
+    soru = st.chat_input("Mesajınızı buraya yazın...")
 
 # --- AKILLI İŞLEMCİ ---
 if soru:
     st.session_state.messages.append({"role": "user", "content": soru})
-    with chat_container:
+    with chat_area:
         with st.chat_message("user"):
             st.markdown(soru)
 
-    with chat_container:
+    with chat_area:
         with st.chat_message("assistant"):
             durum = st.status("🛡️ Eren AI Analiz Ediyor...")
+            
             try:
-                # --- GÜNCELLENMİŞ KURUMSAL VE DERİN TALİMAT ---
+                # --- GÜNCELLENMİŞ TALİMAT: YÖNLENDİRME METNİ KALDIRILDI ---
                 system_instruction = f"""
-                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve Baş Akademik Danışmanısın. {OKUL_BILGILERI}
-                TEMEL KAYNAĞIN: https://eren.k12.tr/ web sitesindeki kurumsal bilgilerdir.
+                Sen Özel Eren Fen ve Teknoloji Lisesi'nin resmi "Eren AI" akademik asistanı ve AI Akademik Danışmanısın. {OKUL_BILGILERI}
+                
+                ÖNEMLİ KISITLAMA: 
+                Cevaplarının sonunda asla "dijital kütüphaneyi inceleyebilirsin" veya "eren.k12.tr adresindeki kaynaklara bakabilirsin" gibi otomatik yönlendirme cümleleri KULLANMA. Kullanıcı sormadıkça bu web sitesini bir kaynak olarak metin içinde referans verme.
 
-                KRİTİK KURALLAR VE DERİNLİK PROTOKOLÜ: 
-                1. KURUMSAL KİMLİK: Okulun idari yapısı, vizyonu veya etkinlikleri sorulduğunda, daima eren.k12.tr adresindeki en güncel verileri referans al.
-                2. AKADEMİK DERİNLİK: Cevabı doğrudan vermek yerine konuyu öğretmeyi amaçla. Kavramları temel bilimsel yasalarıyla, analitik bir yaklaşımla ve teknik detaylarıyla açıkla. 
-                3. BAĞLAM YÖNETİMİ: Kullanıcı dosyaya referans veriyorsa, o dosyadaki verileri Fen ve Teknoloji Lisesi standartlarında derinlemesine analiz et.
-                4. KURUMSAL ÜSLUP: Profesyonel, teşvik edici ve çözüm odaklı bir dil kullan. Teknik hataları kullanıcıya hissettirme, kurumsal yönlendirme yap.
+                DERİNLİK VE EĞİTİM PROTOKOLÜ:
+                1. CEVAP VERME, ÖĞRET: Bir soru sorulduğunda doğrudan cevabı söyleme. Konunun bilimsel temellerini, formüllerini ve mantığını katmanlı bir şekilde anlat.
+                2. AKADEMİK DİL: Fen ve Teknoloji Lisesi seviyesinde teknik, analitik ve derinlemesine açıklamalar yap.
+                3. DOSYA ANALİZİ: Yüklenen dosya içeriğini bu derinlik filtresinden geçirerek, öğrenciye rehberlik edecek şekilde yorumla.
                 """
                 
                 prompt_parts = [system_instruction, soru]
