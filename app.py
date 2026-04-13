@@ -4,6 +4,7 @@ from PyPDF2 import PdfReader
 from PIL import Image, ImageDraw, ImageFont
 import io
 import datetime
+import os
 
 # --- DÖKÜMAN KÜTÜPHANELERİ ---
 from docx import Document 
@@ -25,7 +26,6 @@ else:
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
 # --- DÖKÜMAN ÜRETİM FONKSİYONLARI ---
-
 def create_word(text, topic):
     doc = Document()
     doc.add_heading('Özel Eren Fen ve Teknoloji Lisesi', 0)
@@ -70,8 +70,31 @@ def create_image(text):
     img.save(bio, format="PNG")
     return bio.getvalue()
 
-# --- SOL MENÜ (ANAYASAL SABİT) ---
+# --- DOSYA OKUMA MOTORU ---
+def read_file_content(uploaded_file):
+    content = ""
+    try:
+        if uploaded_file.type == "application/pdf":
+            reader = PdfReader(uploaded_file)
+            for page in reader.pages:
+                content += page.extract_text() + "\n"
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            content = docx2python(uploaded_file).text
+        elif uploaded_file.name.endswith(('xlsx', 'csv')):
+            df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('xlsx') else pd.read_csv(uploaded_file)
+            content = df.to_string()
+    except Exception as e:
+        content = f"Okuma Hatası: {str(e)}"
+    return content
+
+# --- SOL MENÜ (ANAYASAL SABİT VE LOGO) ---
 with st.sidebar:
+    # LOGO KONTROLÜ VE YERLEŞTİRME
+    if os.path.exists("Logo.png"):
+        st.image("Logo.png", use_container_width=True)
+    else:
+        st.warning("⚠️ Logo.png bulunamadı. Lütfen ana dizine ekleyin.")
+        
     st.markdown("### **🛡️ Eren AI Education**")
     st.markdown("**Eren Yapay Zeka Sistemleri**")
     st.success("**Anayasal Mod:** Her soru için bireysel ve derin analiz zorunludur.")
@@ -88,7 +111,7 @@ with st.sidebar:
 # --- ANA ARAYÜZ ---
 st.title("🛡️ Akademik Müfredat ve Analiz Portalı")
 
-# Soru ve Dosya Girişini Birleştiriyoruz
+# Soru ve Dosya Giriş Paneli
 with st.container(border=True):
     uploaded_file = st.file_uploader("Dosya Yükleme (PDF, Word, Excel, PPTX, Görsel)", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], label_visibility="collapsed")
     user_input = st.chat_input("Eren AI'a sormak istediğin soruyu bu alana girebilirsiniz.")
@@ -111,21 +134,23 @@ if user_input:
         with st.status("🔍 Eren AI Akademik Analizi Yürütüyor...") as status:
             instruction = """Sen Eren AI'sın. Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın.
             Giriş: 'Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum.'
-            1. Her soruyu teker teker analiz et.
+            1. Her soruyu teker teker analiz et. Asla toplu cevap verme.
             2. Kavramsal Derinlik, Analitik İnceleme ve Analitik Sorgulama başlıklarını kullan.
             3. Sokratik yöntemle öğret, doğrudan cevap verme."""
             
             prompt = [instruction, user_input]
             if uploaded_file:
-                # Dosya okuma logic buraya gelecek (v26.2'deki gibi)
-                prompt.append("Dosya yüklendi.")
+                if uploaded_file.type.startswith("image/"):
+                    prompt.append(Image.open(uploaded_file))
+                else:
+                    prompt.append(read_file_content(uploaded_file))
 
             response = model.generate_content(prompt)
             full_text = response.text
             st.markdown(full_text)
             st.session_state.messages.append({"role": "assistant", "content": full_text})
 
-            # DÖKÜMAN PANELİ (Görsel Dahil)
+            # DÖKÜMAN PANELİ
             st.divider()
             st.write("### 📥 Akademik Çıktı Merkezi")
             c1, c2, c3, c4, c5 = st.columns(5)
