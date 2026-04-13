@@ -24,25 +24,19 @@ else:
 
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- TÜRKÇE KARAKTER DÖNÜŞÜM MOTORU ---
+# --- KARAKTER VE METİN DÜZENLEME ---
 def tr_fix(text):
-    """Türkçe karakterleri PDF'in anlayabileceği standart karakterlere dönüştürür."""
-    # FPDF'in standart fontlarda hata vermemesi için karakter eşlemesi
-    chars = {
-        'İ': 'I', 'ı': 'i', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g',
-        'ç': 'c', 'Ç': 'C', 'ö': 'o', 'Ö': 'O', 'ü': 'u', 'Ü': 'U'
-    }
+    chars = {'İ': 'I', 'ı': 'i', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g', 'ç': 'c', 'Ç': 'C', 'ö': 'o', 'Ö': 'O', 'ü': 'u', 'Ü': 'U'}
     for search, replace in chars.items():
         text = text.replace(search, replace)
     return text
 
 def clean_academic_text(text):
-    """Markdown ve LaTeX kalıntılarını temizler."""
     text = text.replace('$', '').replace('**', '').replace('*', '-')
     text = text.replace('\\times', 'x').replace('\\', '')
     return text
 
-# --- KARARLI DÖKÜMAN MOTORLARI ---
+# --- HATA GEÇİRMEZ DÖKÜMAN MOTORLARI ---
 
 def create_pdf(text):
     pdf = FPDF()
@@ -56,15 +50,14 @@ def create_pdf(text):
             pdf.cell(0, 10, txt="Ozel Eren Fen ve Teknoloji Lisesi", ln=True, align='C')
             pdf.ln(10)
             pdf.set_font("Arial", size=12)
-            
-            # Kritik Nokta: Önce temizle, sonra Türkçe karakterleri PDF uyumlu yap
-            clean_content = clean_academic_text(section.strip())
-            safe_content = tr_fix(clean_content)
-            
-            # Artık FPDFUnicodeEncodingException hatası almayacağız
+            safe_content = tr_fix(clean_academic_text(section.strip()))
             pdf.multi_cell(0, 10, txt=safe_content)
-            
-    return pdf.output(dest='S')
+    
+    # PDF'i doğrudan döndürmek yerine BytesIO ile paketliyoruz (Hata Çözümü)
+    pdf_output = pdf.output(dest='S')
+    if isinstance(pdf_output, str):
+        pdf_output = pdf_output.encode('latin-1')
+    return io.BytesIO(pdf_output)
 
 def create_word(text):
     doc = Document()
@@ -92,21 +85,21 @@ def create_pptx(text):
     prs.save(bio)
     return bio.getvalue()
 
-# --- ARAYÜZ ---
+# --- SOL MENÜ ---
 with st.sidebar:
     if os.path.exists("Logo.png"):
         st.image("Logo.png", use_container_width=True)
     st.markdown("### **🛡️ Eren AI Education**")
     st.success("**Anayasal Mod Aktif**")
     st.divider()
-    st.info("**Sistem Rehberi:**\n1. Sorunu yaz.\n2. Analizi bekle.\n3. Hatasız PDF'i indir.")
+    st.info("**Rehber:** Analizi tamamla ve dökümanları tek tıkla indir.")
 
+# --- ANA PANEL ---
 st.title("🛡️ Akademik Müfredat ve Analiz Portalı")
 
-# Giriş Alanı
 with st.container(border=True):
     uploaded_file = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], label_visibility="collapsed")
-    user_input = st.chat_input("Eren AI'a sorunuzu iletin...")
+    user_input = st.chat_input("Eren AI'a sorunuzu yazın...")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -119,8 +112,8 @@ if user_input:
     with st.chat_message("user"): st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.status("🔍 Veri İşleniyor ve Karakterler Düzenleniyor...") as status:
-            response = model.generate_content([f"Sen Eren AI'sın. Başlıkları ## ile ayır.", user_input])
+        with st.status("🔍 Akademik Süreç İşletiliyor...") as status:
+            response = model.generate_content([f"Sen Eren AI'sın. Bölümleri ## ile ayır.", user_input])
             full_text = response.text
             st.markdown(full_text)
             st.session_state.messages.append({"role": "assistant", "content": full_text})
@@ -129,8 +122,8 @@ if user_input:
             st.write("### 📥 Akademik Çıktı Merkezi")
             c1, c2, c3 = st.columns(3)
             
-            # PDF artık çökmeden üretilecek
+            # Veriler artık BytesIO veya Bayt dizisi olarak garanti altına alındı
             c1.download_button("📄 Word", create_word(full_text), "ErenAI.docx")
-            c2.download_button("📕 PDF (Garantili)", create_pdf(full_text), "ErenAI.pdf")
+            c2.download_button("📕 PDF", create_pdf(full_text), "ErenAI.pdf", mime="application/pdf")
             c3.download_button("📽️ Sunum", create_pptx(full_text), "ErenAI.pptx")
-            status.update(label="✅ Tüm Formatlar Hazır", state="complete")
+            status.update(label="✅ Çıktılar Hazır", state="complete")
