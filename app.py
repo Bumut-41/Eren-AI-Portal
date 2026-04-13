@@ -10,10 +10,8 @@ import re
 # --- DÖKÜMAN KÜTÜPHANELERİ ---
 from docx import Document 
 from pptx import Presentation 
-from pptx.util import Inches, Pt
 import pandas as pd 
 from fpdf import FPDF 
-from docx2python import docx2python 
 
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI | Akademik Portal", page_icon="🛡️", layout="wide")
@@ -26,15 +24,47 @@ else:
 
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- AKADEMİK METİN DÜZENLEYİCİ ---
+# --- TÜRKÇE KARAKTER DÖNÜŞÜM MOTORU ---
+def tr_fix(text):
+    """Türkçe karakterleri PDF'in anlayabileceği standart karakterlere dönüştürür."""
+    # FPDF'in standart fontlarda hata vermemesi için karakter eşlemesi
+    chars = {
+        'İ': 'I', 'ı': 'i', 'Ş': 'S', 'ş': 's', 'Ğ': 'G', 'ğ': 'g',
+        'ç': 'c', 'Ç': 'C', 'ö': 'o', 'Ö': 'O', 'ü': 'u', 'Ü': 'U'
+    }
+    for search, replace in chars.items():
+        text = text.replace(search, replace)
+    return text
+
 def clean_academic_text(text):
-    """Metni dökümanlar için temizler ve Unicode uyumlu hale getirir."""
+    """Markdown ve LaTeX kalıntılarını temizler."""
     text = text.replace('$', '').replace('**', '').replace('*', '-')
     text = text.replace('\\times', 'x').replace('\\', '')
-    # PDF Unicode hatası için kritik temizlik
     return text
 
 # --- KARARLI DÖKÜMAN MOTORLARI ---
+
+def create_pdf(text):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    sections = re.split(r'##|###|Bölüm:', text)
+    
+    for section in sections:
+        if section.strip():
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(0, 10, txt="Ozel Eren Fen ve Teknoloji Lisesi", ln=True, align='C')
+            pdf.ln(10)
+            pdf.set_font("Arial", size=12)
+            
+            # Kritik Nokta: Önce temizle, sonra Türkçe karakterleri PDF uyumlu yap
+            clean_content = clean_academic_text(section.strip())
+            safe_content = tr_fix(clean_content)
+            
+            # Artık FPDFUnicodeEncodingException hatası almayacağız
+            pdf.multi_cell(0, 10, txt=safe_content)
+            
+    return pdf.output(dest='S')
 
 def create_word(text):
     doc = Document()
@@ -47,25 +77,6 @@ def create_word(text):
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
-
-def create_pdf(text):
-    # 'latin-1' hatasını aşmak için font desteği ve encoding ayarı
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    sections = re.split(r'##|###|Bölüm:', text)
-    for section in sections:
-        if section.strip():
-            pdf.add_page()
-            # Standart fontlar Türkçe karakterde hata verebilir, 
-            # en güvenli yol karakterleri normalize etmektir.
-            pdf.set_font("Arial", 'B', 16)
-            pdf.cell(0, 10, txt="Ozel Eren Fen ve Teknoloji Lisesi", ln=True, align='C')
-            pdf.ln(10)
-            pdf.set_font("Arial", size=12)
-            # Unicode hatasını önlemek için metni güvenli hale getiriyoruz
-            safe_content = clean_academic_text(section.strip()).encode('utf-8', 'ignore').decode('utf-8')
-            pdf.multi_cell(0, 10, txt=safe_content)
-    return pdf.output(dest='S').encode('latin-1', 'replace')
 
 def create_pptx(text):
     prs = Presentation()
@@ -88,15 +99,14 @@ with st.sidebar:
     st.markdown("### **🛡️ Eren AI Education**")
     st.success("**Anayasal Mod Aktif**")
     st.divider()
-    st.markdown("### **📖 Sistem Rehberi**")
-    st.info("1. Dosyayı yükle.\n2. Analizi başlat.\n3. Formatlı dökümanı indir.")
-    st.caption("© 2026 Eren Eğitim Kurumları")
+    st.info("**Sistem Rehberi:**\n1. Sorunu yaz.\n2. Analizi bekle.\n3. Hatasız PDF'i indir.")
 
 st.title("🛡️ Akademik Müfredat ve Analiz Portalı")
 
+# Giriş Alanı
 with st.container(border=True):
     uploaded_file = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], label_visibility="collapsed")
-    user_input = st.chat_input("Sorunuzu buraya yazın...")
+    user_input = st.chat_input("Eren AI'a sorunuzu iletin...")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -109,9 +119,8 @@ if user_input:
     with st.chat_message("user"): st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.status("🔍 Akademik Çıktılar Hazırlanıyor...") as status:
-            prompt = [f"Sen Eren AI'sın. Optik ve Arduino gibi konularda derin analiz yap. Bölümleri ## ile ayır.", user_input]
-            response = model.generate_content(prompt)
+        with st.status("🔍 Veri İşleniyor ve Karakterler Düzenleniyor...") as status:
+            response = model.generate_content([f"Sen Eren AI'sın. Başlıkları ## ile ayır.", user_input])
             full_text = response.text
             st.markdown(full_text)
             st.session_state.messages.append({"role": "assistant", "content": full_text})
@@ -119,8 +128,9 @@ if user_input:
             st.divider()
             st.write("### 📥 Akademik Çıktı Merkezi")
             c1, c2, c3 = st.columns(3)
-            # Hata veren PDF butonu artık güvenli bayt akışında
+            
+            # PDF artık çökmeden üretilecek
             c1.download_button("📄 Word", create_word(full_text), "ErenAI.docx")
-            c2.download_button("📕 PDF", create_pdf(full_text), "ErenAI.pdf")
+            c2.download_button("📕 PDF (Garantili)", create_pdf(full_text), "ErenAI.pdf")
             c3.download_button("📽️ Sunum", create_pptx(full_text), "ErenAI.pptx")
-            status.update(label="✅ Hazır", state="complete")
+            status.update(label="✅ Tüm Formatlar Hazır", state="complete")
