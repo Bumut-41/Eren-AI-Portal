@@ -6,209 +6,164 @@ import io
 import datetime
 
 # --- DÖKÜMAN VE VERİ İŞLEME KÜTÜPHANELERİ ---
-from docx import Document # Word için
-from pptx import Presentation # PowerPoint için
-import pandas as pd # Excel için
-from fpdf import FPDF # PDF için
-from docx2python import docx2python # Word okuma için
-from pptx import Presentation as ReadPPTX # PPTX okuma için
+from docx import Document 
+from pptx import Presentation 
+import pandas as pd 
+from fpdf import FPDF # fpdf2 kütüphanesinden gelir
+from docx2python import docx2python 
+from pptx import Presentation as ReadPPTX 
 
 # --- SİSTEM AYARLARI ---
 st.set_page_config(page_title="Eren AI | Akademik Portal", page_icon="🛡️", layout="wide")
 
+# API Anahtarı Kontrolü
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
-    st.error("API Anahtarı bulunamadı! Lütfen secrets.toml dosyasını kontrol edin.")
+    st.error("API Anahtarı (GOOGLE_API_KEY) bulunamadı! Lütfen secrets.toml dosyasını kontrol edin.")
     st.stop()
 
 model = genai.GenerativeModel('gemini-3-flash-preview')
 
-# --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ BİLGİ TABANI ---
-OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Web: https://eren.k12.tr/"
+# --- ÖZEL EREN FEN VE TEKNOLOJİ LİSESİ SABİTLERİ ---
+OKUL_BILGILERI = "Kurum: Özel Eren Fen ve Teknoloji Lisesi | Akademik Yapay Zeka Sistemi"
 
-# --- ANAYASAL DÖKÜMAN ÜRETİM MOTORLARI (2. ETAP) ---
+# --- DÖKÜMAN ÜRETİM MOTORLARI (v26.1 GÜNCEL) ---
 
 def create_word_file(text, topic):
     doc = Document()
     doc.add_heading('Özel Eren Fen ve Teknoloji Lisesi', 0)
     doc.add_heading(f'Akademik Çalışma Fasikülü: {topic}', level=1)
-    doc.add_paragraph(f"Tarih: {datetime.datetime.now().strftime('%d/%m/%Y')}")
+    doc.add_paragraph(f"Rapor Tarihi: {datetime.datetime.now().strftime('%d/%m/%Y')}")
+    doc.add_paragraph("-" * 30)
     doc.add_paragraph(text)
-    doc.add_paragraph("\n\n© Eren AI Education - Eren Yapay Zeka Sistemleri")
+    doc.add_paragraph("\n\n© Eren AI Education - Akademik Rehberlik Birimi")
     bio = io.BytesIO()
     doc.save(bio)
     return bio.getvalue()
 
 def create_pdf_file(text, topic):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_font('Arial', '', '', uni=True) 
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="Özel Eren Fen ve Teknoloji Lisesi", ln=True, align='C')
-    pdf.ln(10)
-    pdf.multi_cell(0, 10, txt=text.encode('latin-1', 'ignore').decode('latin-1'))
-    return pdf.output(dest='S').encode('latin-1', 'ignore')
+    try:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        # Standart font (Türkçe karakter desteği için fpdf2 gereklidir)
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt="Ozel Eren Fen ve Teknoloji Lisesi", ln=True, align='C')
+        pdf.ln(10)
+        # Metni Latin-1'e güvenli şekilde kodla (Hata önleyici)
+        safe_text = text.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(0, 10, txt=safe_text)
+        return pdf.output(dest='S')
+    except Exception as e:
+        return f"PDF Hatası: {str(e)}".encode()
 
 def create_pptx_file(text, topic):
     prs = Presentation()
-    # Kapak Slaytı
-    slide_layout = prs.slide_layouts[0]
-    slide = prs.slides.add_slide(slide_layout)
+    slide = prs.slides.add_slide(prs.slide_layouts[0])
     slide.shapes.title.text = topic
-    slide.placeholders[1].text = "Eren AI Education Akademik Sunumu"
+    slide.placeholders[1].text = "Eren AI Akademik Sunum Serisi"
     
-    # İçerik Slaytı (Özet)
-    slide_layout = prs.slide_layouts[1]
-    slide = prs.slides.add_slide(slide_layout)
-    slide.shapes.title.text = "Akademik Analiz Özeti"
-    slide.placeholders[1].text = text[:1000] + "..."
+    slide2 = prs.slides.add_slide(prs.slide_layouts[1])
+    slide2.shapes.title.text = "Analiz Özeti"
+    slide2.placeholders[1].text = text[:1000] + "..."
     
     bio = io.BytesIO()
     prs.save(bio)
-    return bio.getvalue()
-
-def create_excel_file(text):
-    # Metni satırlara bölüp basit bir tablo oluşturur
-    data = {"Akademik Analiz İçeriği": [text[:500]], "Oluşturulma": [datetime.datetime.now()]}
-    df = pd.DataFrame(data)
-    bio = io.BytesIO()
-    with pd.ExcelWriter(bio, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
     return bio.getvalue()
 
 # --- DOSYA OKUMA MOTORLARI ---
 
 def read_file_content(uploaded_file):
     content = ""
-    if uploaded_file.type == "application/pdf":
-        reader = PdfReader(uploaded_file)
-        for page in reader.pages:
-            content += page.extract_text() + "\n"
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        content = docx2python(uploaded_file).text
-    elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-        prs = ReadPPTX(uploaded_file)
-        for slide in prs.slides:
-            for shape in slide.shapes:
-                if hasattr(shape, "text"):
-                    content += shape.text + "\n"
-    elif uploaded_file.type in ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "text/csv"]:
-        df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('xlsx') else pd.read_csv(uploaded_file)
-        content = df.to_string()
+    try:
+        if uploaded_file.type == "application/pdf":
+            reader = PdfReader(uploaded_file)
+            for page in reader.pages:
+                content += page.extract_text() + "\n"
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            content = docx2python(uploaded_file).text
+        elif uploaded_file.type == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            prs = ReadPPTX(uploaded_file)
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        content += shape.text + "\n"
+        elif uploaded_file.name.endswith(('xlsx', 'csv')):
+            df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('xlsx') else pd.read_csv(uploaded_file)
+            content = df.to_string()
+    except Exception as e:
+        content = f"Dosya okuma hatası: {str(e)}"
     return content
 
-# --- SOL MENÜ (ANAYASAL VE SABİT) ---
-def sidebar_ciz():
-    with st.sidebar:
-        try:
-            st.image("Logo.png", use_container_width=True)
-        except:
-            st.subheader("🛡️ Eren AI")
-        
-        st.markdown("---")
-        st.markdown("### **🛡️ Eren AI Education**")
-        st.markdown("**Eren Yapay Zeka Sistemleri**")
-        st.success("**Anayasal Mod:** Her soru için bireysel ve derin analiz zorunludur.")
-        
-        st.markdown("### **📖 Sistem Rehberi**")
-        st.info("""
-        1. **Akademik dökümanlarınızı veya ödev dosyalarınızı** "Dosya Yükleme" alanından sisteme güvenle iletebilirsiniz.
-        2. Analiz edilmesini istediğiniz tüm hususları **metin alanına girerek** Eren AI ile akademik etkileşim başlatabilirsiniz.
-        """)
-        
-        st.divider()
-        st.caption("© 2026 Eren Eğitim Kurumları")
+# --- ARAYÜZ VE SOHBET MANTIĞI ---
 
-sidebar_ciz()
+with st.sidebar:
+    st.title("🛡️ Eren AI Education")
+    st.subheader("v26.1 Akademik Portal")
+    st.success("Anayasal Mod Aktif")
+    st.info("Bu sistem, Özel Eren Fen ve Teknoloji Lisesi standartlarında derinlemesine analiz yapar.")
+    st.divider()
+    st.caption("© 2026 Eren Eğitim Kurumları")
 
-# --- SOHBET GEÇMİŞİ VE ARAYÜZ ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-chat_area = st.container()
-with chat_area:
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
+for m in st.session_state.messages:
+    with st.chat_message(m["role"]):
+        st.markdown(m["content"])
 
-# --- GİRİŞ PANELİ ---
+# Giriş ve Dosya Alanı
 with st.container():
-    st.write("---")
-    dosya = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], 
-                             key="uploader_main", 
-                             label_visibility="collapsed")
-    
-    soru = st.chat_input("Eren AI'a sormak istediğin soruyu bu alana girebilirsiniz.")
+    uploaded_file = st.file_uploader("Ödev veya Veri Dosyası Yükle", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'])
+    user_input = st.chat_input("Analiz için sorunuzu yazın...")
 
-# --- ANA İŞLEMCİ ---
-if soru:
-    st.session_state.messages.append({"role": "user", "content": soru})
-    with chat_area:
-        with st.chat_message("user"):
-            st.markdown(soru)
+if user_input:
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    with chat_area:
-        with st.chat_message("assistant"):
-            durum = st.status("🛡️ Eren AI Akademik Analiz ve Döküman Motoru Çalışıyor...")
-            
+    with st.chat_message("assistant"):
+        with st.status("🔍 Eren AI Akademik Süzgeçten Geçiriyor...") as status:
             try:
-                # ANAYASAL TALİMAT (1. VE 2. ETAP BÜTÜNLEŞİK)
-                system_instruction = f"""
-                Sen Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekasısın. {OKUL_BILGILERI}
-                Cevaplarına başlarken "Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum." ifadesini kullan.
-
-                🛡️ AKADEMİK ANAYASA:
-                1. MATERYALDEKİ TÜM SORULARI TEKER TEKER ANALİZ ET. Asla toplu cevap verme. Her soru için ## SORU [NO] başlığı aç.
-                2. DERİNLİK ZORUNLUDUR. Bilimsel yasaları bir ders notu zenginliğinde anlat.
-                3. CEVAP VERME, ÖĞRET. Şıkları analiz et ama doğruyu söyleme, Sokratik yöntemi uygula.
-                4. ZORUNLU FORMAT: Her soru için '📚 Kavramsal ve Bilimsel Derinlik', '🔍 Analitik İnceleme ve Çözüm Stratejisi' ve '💡 Analitik Sorgulama ve Sentez' başlıklarını kullan.
+                # Anayasal Talimat Seti
+                instruction = f"""
+                Sen Eren AI'sın. {OKUL_BILGILERI}. 
+                Giriş cümlen: 'Eren AI, Özel Eren Fen ve Teknoloji Lisesi'nin Yapay Zekası olarak size hizmet ediyorum.'
+                
+                KURALLAR:
+                1. Materyaldeki her soruyu ## SORU [NO] şeklinde tek tek analiz et.
+                2. '📚 Kavramsal ve Bilimsel Derinlik', '🔍 Analitik İnceleme ve Çözüm Stratejisi', '💡 Analitik Sorgulama ve Sentez' başlıklarını kullan.
+                3. Doğrudan cevap verme, Sokratik yöntemle öğret.
                 """
                 
-                input_data = [system_instruction, soru]
-                
-                if dosya:
-                    if dosya.type.startswith("image/"):
-                        input_data.append(Image.open(dosya))
+                prompt = [instruction, user_input]
+                if uploaded_file:
+                    if uploaded_file.type.startswith("image/"):
+                        prompt.append(Image.open(uploaded_file))
                     else:
-                        file_text = read_file_content(dosya)
-                        input_data.append(f"ANALİZ EDİLECEK DOSYA İÇERİĞİ:\n{file_text}")
+                        prompt.append(f"DOSYA İÇERİĞİ:\n{read_file_content(uploaded_file)}")
 
-                # AI Analizi Başlatır
-                full_response = ""
-                response = model.generate_content(input_data)
-                full_response = response.text
+                response = model.generate_content(prompt)
+                full_text = response.text
                 
-                # EKRANA YAZDIRMA (1. ETAP)
-                st.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+                st.markdown(full_text)
+                st.session_state.messages.append({"role": "assistant", "content": full_text})
                 
-                # DÖKÜMAN OLUŞTURMA PANELİ (2. ETAP)
+                # --- ÇIKTI PANELİ ---
                 st.divider()
                 st.write("### 📥 Akademik Çıktı Merkezi")
-                st.caption("Analiz sonuçlarını kurumsal döküman formatlarında indirin:")
+                col1, col2, col3 = st.columns(3)
                 
-                c1, c2, c3, c4 = st.columns(4)
+                with col1:
+                    st.download_button("📄 Word Fasikül", create_word_file(full_text, "Akademik Analiz"), "ErenAI_Analiz.docx")
+                with col2:
+                    st.download_button("📕 PDF Rapor", create_pdf_file(full_text, "Akademik Analiz"), "ErenAI_Analiz.pdf")
+                with col3:
+                    st.download_button("📽️ Sunum (PPTX)", create_pptx_file(full_text, "Akademik Sunum"), "ErenAI_Sunum.pptx")
                 
-                # Word Hazırla
-                word_bytes = create_word_file(full_response, "Akademik Analiz Raporu")
-                c1.download_button("📄 Word Fasikül", word_bytes, f"ErenAI_Analiz_{datetime.date.today()}.docx")
-                
-                # PDF Hazırla
-                pdf_bytes = create_pdf_file(full_response, "Akademik Analiz Raporu")
-                c2.download_button("📕 PDF Rapor", pdf_bytes, f"ErenAI_Analiz_{datetime.date.today()}.pdf")
-                
-                # PPTX Hazırla
-                pptx_bytes = create_pptx_file(full_response, "Akademik Sunum")
-                c3.download_button("📽️ PPTX Sunum", pptx_bytes, f"ErenAI_Sunum_{datetime.date.today()}.pptx")
-                
-                # Excel Hazırla
-                excel_bytes = create_excel_file(full_response)
-                c4.download_button("📊 Excel Veri", excel_bytes, f"ErenAI_Veri_{datetime.date.today()}.xlsx")
-                
-                durum.update(label="✅ Analiz ve Dökümanlar Hazır", state="complete")
-                
+                status.update(label="✅ Analiz Tamamlandı", state="complete")
+            
             except Exception as e:
-                durum.update(label="❌ Sistem Hatası", state="error")
-                st.error(f"Teknik bir sorun oluştu: {str(e)}")
+                st.error(f"Kritik Hata: {str(e)}")
+                status.update(label="❌ Hata Oluştu", state="error")
