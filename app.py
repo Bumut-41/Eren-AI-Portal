@@ -1,7 +1,5 @@
 import streamlit as st
 import google.generativeai as genai
-from PyPDF2 import PdfReader
-from PIL import Image, ImageDraw
 import io
 import datetime
 import os
@@ -10,7 +8,6 @@ import re
 # --- DÖKÜMAN KÜTÜPHANELERİ ---
 from docx import Document 
 from pptx import Presentation 
-import pandas as pd 
 from fpdf import FPDF 
 
 # --- SİSTEM AYARLARI ---
@@ -36,12 +33,12 @@ def clean_academic_text(text):
     text = text.replace('\\times', 'x').replace('\\', '')
     return text
 
-# --- HATA GEÇİRMEZ DÖKÜMAN MOTORLARI ---
+# --- GARANTİLİ DOSYA ÜRETİM MOTORLARI ---
 
-def create_pdf(text):
+def create_pdf_bytes(text):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    sections = re.split(r'##|###|Bölüm:', text)
+    sections = re.split(r'##|###|Slayt \d+:|Bölüm:', text)
     
     for section in sections:
         if section.strip():
@@ -53,16 +50,13 @@ def create_pdf(text):
             safe_content = tr_fix(clean_academic_text(section.strip()))
             pdf.multi_cell(0, 10, txt=safe_content)
     
-    # PDF'i doğrudan döndürmek yerine BytesIO ile paketliyoruz (Hata Çözümü)
-    pdf_output = pdf.output(dest='S')
-    if isinstance(pdf_output, str):
-        pdf_output = pdf_output.encode('latin-1')
-    return io.BytesIO(pdf_output)
+    # PDF verisini ham bayt dizisi olarak döndürür
+    return pdf.output(dest='S').encode('latin-1')
 
-def create_word(text):
+def create_word_bytes(text):
     doc = Document()
     doc.add_heading('Özel Eren Fen ve Teknoloji Lisesi', 0)
-    sections = re.split(r'##|###|Bölüm:', text)
+    sections = re.split(r'##|###|Slayt \d+:|Bölüm:', text)
     for section in sections:
         if section.strip():
             doc.add_paragraph(clean_academic_text(section.strip()))
@@ -71,9 +65,9 @@ def create_word(text):
     doc.save(bio)
     return bio.getvalue()
 
-def create_pptx(text):
+def create_pptx_bytes(text):
     prs = Presentation()
-    sections = re.split(r'##|###|Bölüm:', text)
+    sections = re.split(r'##|###|Slayt \d+:|Bölüm:', text)
     for section in sections:
         if len(section.strip()) > 10:
             slide = prs.slides.add_slide(prs.slide_layouts[1])
@@ -87,19 +81,18 @@ def create_pptx(text):
 
 # --- SOL MENÜ ---
 with st.sidebar:
-    if os.path.exists("Logo.png"):
-        st.image("Logo.png", use_container_width=True)
+    st.image("https://raw.githubusercontent.com/eren-ai/portal/main/logo.png", use_container_width=True) # Logo yolu örnektir
     st.markdown("### **🛡️ Eren AI Education**")
     st.success("**Anayasal Mod Aktif**")
     st.divider()
-    st.info("**Rehber:** Analizi tamamla ve dökümanları tek tıkla indir.")
+    st.info("**Rehber:** Analiz bittikten sonra aşağıdaki butonlar aktifleşecektir.")
 
 # --- ANA PANEL ---
 st.title("🛡️ Akademik Müfredat ve Analiz Portalı")
 
 with st.container(border=True):
     uploaded_file = st.file_uploader("Dosya Yükleme", type=['pdf','docx','xlsx','pptx','csv','png','jpg','jpeg'], label_visibility="collapsed")
-    user_input = st.chat_input("Eren AI'a sorunuzu yazın...")
+    user_input = st.chat_input("Optik veya Arduino hakkında sorunuzu yazın...")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -112,8 +105,8 @@ if user_input:
     with st.chat_message("user"): st.markdown(user_input)
 
     with st.chat_message("assistant"):
-        with st.status("🔍 Akademik Süreç İşletiliyor...") as status:
-            response = model.generate_content([f"Sen Eren AI'sın. Bölümleri ## ile ayır.", user_input])
+        with st.status("🔍 Dosya Yapılandırılıyor...") as status:
+            response = model.generate_content([f"Sen Eren AI'sın. İçeriği Slayt 1, Slayt 2 şeklinde bölümlere ayır.", user_input])
             full_text = response.text
             st.markdown(full_text)
             st.session_state.messages.append({"role": "assistant", "content": full_text})
@@ -122,8 +115,8 @@ if user_input:
             st.write("### 📥 Akademik Çıktı Merkezi")
             c1, c2, c3 = st.columns(3)
             
-            # Veriler artık BytesIO veya Bayt dizisi olarak garanti altına alındı
-            c1.download_button("📄 Word", create_word(full_text), "ErenAI.docx")
-            c2.download_button("📕 PDF", create_pdf(full_text), "ErenAI.pdf", mime="application/pdf")
-            c3.download_button("📽️ Sunum", create_pptx(full_text), "ErenAI.pptx")
-            status.update(label="✅ Çıktılar Hazır", state="complete")
+            # Veriler ham bayt (getvalue) olarak butona teslim ediliyor
+            c1.download_button("📄 Word Fasikül", create_word_bytes(full_text), "ErenAI_Rapor.docx")
+            c2.download_button("📕 PDF Döküman", create_pdf_bytes(full_text), "ErenAI_Rapor.pdf", mime="application/pdf")
+            c3.download_button("📽️ PPTX Sunum", create_pptx_bytes(full_text), "ErenAI_Sunum.pptx")
+            status.update(label="✅ Dosyalar Oluşturuldu", state="complete")
