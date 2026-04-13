@@ -1,9 +1,10 @@
 streamlit
 google-generativeai
-PyPDF2
-pillow
-pandas
 python-docx
 python-pptx
-xlsxwriter
-pdf2image
+pandas
+openpyxl
+fpdf2
+docx2python
+PyPDF2
+Pillow
